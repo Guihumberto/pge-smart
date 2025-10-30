@@ -38,6 +38,11 @@
           <v-list-item-title>{{ workspace.name }}</v-list-item-title>
           <v-list-item-subtitle>{{ workspace.description }}</v-list-item-subtitle>
         </v-list-item-content>
+        <v-list-item-action class="mr-2">
+          <v-btn icon @click="toggleHighlighted(workspace.id)" :color="workspace.highlighted ? 'yellow darken-2' : 'grey'" size="small">
+            <v-icon>{{ workspace.highlighted ? 'mdi-star' : 'mdi-star-outline' }}</v-icon>
+          </v-btn>
+        </v-list-item-action>
         <v-list-item-action>
           <v-list-item-action-text>{{ formatDate(workspace.date) }}</v-list-item-action-text>
         </v-list-item-action>
@@ -48,25 +53,20 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useWorkspacesStore } from '@/stores/workspaces.store'
 
-const exampleWorkspaces = ref([
-  { id: 1, name: 'Workspace 1', description: 'Projetos de design gráfico', date: '2023-10-01' },
-  { id: 2, name: 'Workspace 2', description: 'Desenvolvimento web fullstack', date: '2023-09-15' },
-  { id: 3, name: 'Workspace 3', description: 'Análises de dados e relatórios', date: '2023-08-20' },
-  { id: 4, name: 'Workspace Alpha', description: 'Projetos experimentais', date: '2023-11-05' },
-  { id: 5, name: 'Workspace Beta', description: 'Aplicativos móveis', date: '2023-07-12' }
-])
+const workspacesStore = useWorkspacesStore()
 
 const searchTerm = ref('')
 const sortBy = ref('name')
 
 const sortOptions = [
-  { text: 'Ordem alfabética', value: 'name' },
-  { text: 'Por data', value: 'date' }
+  { text: 'Ordem alfabética (A-Z)', value: 'name' },
+  { text: 'Por data (mais recente)', value: 'date' }
 ]
 
 const filteredSortedWorkspaces = computed(() => {
-  let filtered = exampleWorkspaces.value.filter(ws =>
+  let filtered = workspacesStore.workspaces.filter(ws =>
     ws.name.toLowerCase().includes(searchTerm.value.toLowerCase()) ||
     ws.description.toLowerCase().includes(searchTerm.value.toLowerCase())
   )
@@ -79,6 +79,8 @@ const filteredSortedWorkspaces = computed(() => {
 
   return filtered
 })
+
+const toggleHighlighted = (id) => workspacesStore.toggleHighlighted(id)
 
 function formatDate(dateStr) {
   const date = new Date(dateStr)

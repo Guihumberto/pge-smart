@@ -1,10 +1,9 @@
 <template>
-    <v-container
-        class="fill-height d-flex flex-column justify-center align-center"
-    >
+    <v-container>
         <SearchBar class="mb-4" />
         <CardGrid class="mb-4" />
         <WorkspaceCard />
+        <FeaturedWorkspaces />
     </v-container>
 </template>
 
@@ -12,6 +11,7 @@
 import SearchBar from '@/components/SearchBar.vue'
 import CardGrid from '@/components/CardGrid.vue'
 import WorkspaceCard from '@/components/WorkspaceCard.vue'
+import FeaturedWorkspaces from '@/components/FeaturedWorkspaces.vue'
 </script>
 
 <style scoped>

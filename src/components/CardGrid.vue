@@ -16,7 +16,8 @@
       </v-col>
     </v-row>
     <v-row class="justify-center mt-10">
-      <v-btn variant="flat" color="primary" prepend-icon="mdi-plus">Ver mais</v-btn>
+      <v-btn variant="flat" color="blue-lighten-5
+" prepend-icon="mdi-plus">Ver mais</v-btn>
     </v-row>
   </v-container>
 </template>
