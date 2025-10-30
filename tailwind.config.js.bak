@@ -1,0 +1,15 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{vue,js,ts,jsx,tsx}",
+  ],
+  important: true, // Importante para sobrescrever Vuetify quando necessário
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+  corePlugins: {
+    preflight: false, // Desabilita o reset do Tailwind para não conflitar com Vuetify
+  },
+}
