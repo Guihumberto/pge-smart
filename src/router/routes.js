@@ -18,6 +18,21 @@ export default [
         path: '/user-area',
         name: 'UserArea',
         component: () => import('@/views/UserArea.vue'),
+      },
+      {
+        path: '/search-results',
+        name: 'SearchResults',
+        component: () => import('@/views/SearchResults.vue'),
+      },
+      {
+        path: '/new-workspace',
+        name: 'NewWorkspace',
+        component: () => import('@/views/NewWorkspace.vue'),
+      },
+      {
+        path: '/my-folders',
+        name: 'MyFolders',
+        component: () => import('@/views/MyFolders.vue'),
       }
     ]
   },

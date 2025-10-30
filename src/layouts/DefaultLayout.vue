@@ -1,7 +1,13 @@
 <template>
   <v-app>
     <v-navigation-drawer v-model="drawer" app>
-      <v-list>
+      <v-card variant="text">
+        <v-card-text class="text-center">
+          <h3>PGE SMART</h3>
+          Protótipo
+        </v-card-text>
+      </v-card>
+      <v-list class="pa-0">
         <v-list-item
           v-for="item in menuItems"
           :key="item.title"
@@ -16,7 +22,7 @@
       </v-list>
     </v-navigation-drawer>
 
-    <v-app-bar app color="primary" dark>
+    <v-app-bar app color="primary" dark elevation="0" density="compact">
       <v-app-bar-nav-icon @click="drawer = !drawer"></v-app-bar-nav-icon>
       <v-toolbar-title>PGE SMART</v-toolbar-title>
       <v-spacer></v-spacer>
@@ -55,8 +61,8 @@ const router = useRouter()
 
 const drawer = ref(true)
 const menuItems = ref([
-  { title: 'Home', icon: 'mdi-home', to: '/' },
-  { title: 'About', icon: 'mdi-information', to: '/about' },
+  { title: 'Início', icon: 'mdi-home', to: '/' },
+  { title: 'Sobre aplicação', icon: 'mdi-information', to: '/about' },
 ])
 
 const logout = () => {

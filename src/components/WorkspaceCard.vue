@@ -1,16 +1,27 @@
 <template>
-  <v-card class="pa-4" max-width="100%">
+  <v-card class="mpx-10 w-100">
     <v-card-text class="d-flex justify-space-between align-center">
-      <span>Área de trabalho</span>
-      <div class="d-flex gap-2">
-        <v-btn color="primary" variant="outlined">Novo</v-btn>
-        <v-btn color="secondary" variant="outlined">Minhas pastas</v-btn>
+      <h4 class="text-h5">Área de trabalho</h4>
+      <div class="d-flex ga-2">
+        <v-btn color="primary" variant="outlined" @click="goToNewWorkspace">Novo</v-btn>
+        <v-btn color="secondary" variant="outlined" @click="goToMyFolders">Minhas pastas</v-btn>
       </div>
     </v-card-text>
   </v-card>
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
+const goToNewWorkspace = () => {
+  router.push('/new-workspace')
+}
+
+const goToMyFolders = () => {
+  router.push('/my-folders')
+}
 </script>
 
 <style scoped>
