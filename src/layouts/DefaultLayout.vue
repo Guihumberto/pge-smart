@@ -44,7 +44,7 @@
     </v-app-bar>
 
     <v-main>
-      <v-container fluid>
+      <v-container fluid style="height: calc(100vh - 48px);">
         <router-view />
       </v-container>
     </v-main>

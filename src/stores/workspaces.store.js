@@ -23,10 +23,50 @@ export const useWorkspacesStore = defineStore('workspaces', () => {
     workspaces.value.push({ id: Date.now(), highlighted: false, ...workspace })
   }
 
+  // Uploaded documents (for current workspace, assuming single workspace for now)
+  const uploadedDocuments = ref([])
+
+  // Extracted data from uploaded documents
+  const extractedDocuments = ref([])
+
+  function addDocument(document) {
+    const newDoc = { id: Date.now(), selected: true, ...document }
+    uploadedDocuments.value.push(newDoc)
+  }
+
+  function addExtractedData(extractedData) {
+    extractedDocuments.value.push({ ...extractedData, id: Date.now() })
+  }
+
+  function clearExtractedData() {
+    extractedDocuments.value = []
+  }
+
+  function removeDocument(id) {
+    const index = uploadedDocuments.value.findIndex(doc => doc.id === id)
+    if (index !== -1) {
+      uploadedDocuments.value.splice(index, 1)
+    }
+  }
+
+  function toggleDocumentSelection(id) {
+    const doc = uploadedDocuments.value.find(d => d.id === id)
+    if (doc) {
+      doc.selected = !doc.selected
+    }
+  }
+
   return {
     workspaces,
     highlightedWorkspaces,
     toggleHighlighted,
-    addWorkspace
+    addWorkspace,
+    uploadedDocuments,
+    addDocument,
+    removeDocument,
+    toggleDocumentSelection,
+    extractedDocuments,
+    addExtractedData,
+    clearExtractedData
   }
 })
