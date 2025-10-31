@@ -1,10 +1,14 @@
 <template>
   <div class="right-panel-content">
+    <AISummary />
+    <KeywordExtraction />
     <ExtractedData />
   </div>
 </template>
 
 <script setup>
+import AISummary from './workspace/AISummary.vue'
+import KeywordExtraction from './workspace/KeywordExtraction.vue'
 import ExtractedData from './workspace/ExtractedData.vue'
 </script>
 

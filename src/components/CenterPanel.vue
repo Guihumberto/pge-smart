@@ -1,15 +1,25 @@
 <template>
   <div class="center-panel-content">
-    <h2>Ingestão de docs chat</h2>
-    <p>Aqui será possível fazer o carregamentos dos documentos e chat com o doc</p>
     <FileUpload />
-    <ChatComponent />
+    <ChatComponent v-if="showChat" />
   </div>
 </template>
 
 <script setup>
+    import { computed } from 'vue'
+    import { useWorkspacesStore } from '@/stores/workspaces.store'
+    import { storeToRefs } from 'pinia'
+
     import FileUpload from '@/components/workspace/FileUpload.vue'
     import ChatComponent from '@/components/ChatComponent.vue'
+
+    const workspacesStore = useWorkspacesStore()
+    const { uploadedDocuments } = storeToRefs(workspacesStore)
+
+    const showChat = computed(() =>
+      uploadedDocuments.value.length > 0 ||
+      uploadedDocuments.value.some(doc => doc.selected)
+    )
 </script>
 
 <style scoped>
