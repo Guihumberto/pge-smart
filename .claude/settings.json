@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /home/humberto/development/legislacao -name router* -o -name routes*)",
+      "Bash(grep -r \"enrollment\\\\|enroll\\\\|Enrollment\" /home/humberto/development/legislacao/src --include=*.vue --include=*.js)",
+      "Bash(grep -r \"invite\\\\|Invite\" /home/humberto/development/legislacao/src --include=*.vue --include=*.js)",
+      "Bash(grep -rn \"acceptSolicitation\\\\|acceptInvitation\\\\|confirmPermission\\\\|approvePermission\" /home/humberto/development/legislacao/src/ --include=*.js --include=*.vue)",
+      "Bash(find /home/humberto/development/backend-express/src/modules -name \"*.routes.js\" -exec basename {})",
+      "Bash(grep -r \"backend_ia_proccess\\\\|backend_ia_process\\\\|ia_process\\\\|process\" /home/humberto/development/backend-express/src --include=*.js)",
+      "Bash(grep -r properties.*: /home/humberto/development/back_leges/src/createmapping.js)",
+      "Bash(pip install:*)",
+      "Bash(.venv/bin/pip install:*)",
+      "Bash(sudo apt:*)",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv,noheader)",
+      "Bash(ollama pull:*)",
+      "Bash(ollama list:*)",
+      "Bash(curl -s -X POST http://localhost:8100/api/v1/study-pdf -H \"Content-Type: application/json\" -H \"X-API-Key: leges-ia-local-2026\" -d '{\"\"law_name\"\":\"\"teste\"\",\"\"articles\"\":[\"\"1\"\"],\"\"questions\"\":[{\"\"pergunta\"\":\"\"teste questao\"\"}]}')",
+      "Bash(grep -rn \"study-pdf\\\\|studyPdf\\\\|study_pdf\\\\|apifast\\\\|8100\\\\|LOCAL_IA\\\\|ia_proc\\\\|backend_ia\" /home/humberto/development/backend-express/src/ --include=*.js)"
+    ],
+    "additionalDirectories": [
+      "/home/humberto/development/back_leges/src/Service",
+      "/home/humberto/development/back_leges/src/Controllers",
+      "/home/humberto/development/back_leges/src/Routes",
+      "/home/humberto/development/back_leges/api",
+      "/home/humberto/development/legislacao/src/store",
+      "/home/humberto/development/legislacao/src/views",
+      "/home/humberto/development/legislacao/src/router",
+      "/home/humberto/development/legislacao/src/layouts/default",
+      "/home/humberto/development/legislacao/src/components/forum"
+    ]
+  }
+}

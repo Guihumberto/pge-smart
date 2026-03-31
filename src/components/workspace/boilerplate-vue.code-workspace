@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../../.."
+		},
+		{
+			"path": "../../../../backend-express"
+		},
+		{
+			"path": "../../../../backend_ia_proccess"
+		}
+	],
+	"settings": {}
+}

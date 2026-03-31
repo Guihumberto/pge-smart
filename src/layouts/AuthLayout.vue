@@ -1,18 +1,15 @@
 <template>
   <v-app>
-    <appheader v-if="!isLogin" />
     <v-main :class="mainClass">
       <router-view />
     </v-main>
-    <appfooter v-if="!isLogin" />
   </v-app>
 </template>
 
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import appheader from '@/components/layout/AppHeader.vue'
-import appfooter from '@/components/layout/AppFooter.vue'
+
 
 const route = useRoute()
 

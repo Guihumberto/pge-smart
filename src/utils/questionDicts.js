@@ -1,0 +1,76 @@
+export const BANCAS = [
+  'CEBRASPE (CESPE)',
+  'FCC',
+  'FGV',
+  'CESGRANRIO',
+  'CONSULPLAN',
+  'VUNESP',
+  'UEPA',
+  'ESAF',
+  'FADESP'
+]
+
+export const DISCIPLINAS = [
+  { id: 1,  name: 'Direito Administrativo' },
+  { id: 2,  name: 'Direito Constitucional' },
+  { id: 3,  name: 'Direito Tributário' },
+  { id: 4,  name: 'Direito Penal' },
+  { id: 5,  name: 'Direito Civil' },
+  { id: 6,  name: 'Direito Ambiental' },
+  { id: 7,  name: 'Direito Agrário' },
+  { id: 8,  name: 'Direito Humanos' },
+  { id: 9,  name: 'Direito Financeiro' },
+  { id: 10, name: 'Direito Processual do Trabalho' },
+  { id: 11, name: 'Direito Econômico' },
+  { id: 12, name: 'Direito Previdenciário' },
+  { id: 13, name: 'Direito Processual Civil' },
+  { id: 15, name: 'Direito Processual Penal' },
+  { id: 16, name: 'Direito Empresarial' },
+  { id: 17, name: 'Direito do Trabalho' },
+  { id: 18, name: 'Legislação Tributária Estadual' },
+  { id: 19, name: 'Legislação da Advocacia Pública' },
+  { id: 20, name: 'Legislação Penal' },
+  { id: 21, name: 'Processual Penal Especial' },
+  { id: 22, name: 'Aspectos de Direito Proc. Aplicados à Fazenda Pública' },
+  { id: 23, name: 'Direito da Criança e do Adolescente' },
+  { id: 24, name: 'Direito Digital' },
+  { id: 25, name: 'Direito do Consumidor' },
+  { id: 26, name: 'Direito Educacional' },
+  { id: 27, name: 'Direito Eleitoral' },
+  { id: 28, name: 'Direito Internacional Público e Privado' },
+  { id: 29, name: 'Direito Notarial e Registral' },
+  { id: 30, name: 'Direito Sanitário e Saúde' },
+  { id: 31, name: 'Direito Urbanístico' },
+  { id: 32, name: 'Legislação Tributária Municipal' },
+  { id: 33, name: 'Processual Civil Especial' },
+  { id: 34, name: 'Direito Cultural, Desportivo e da Comunicação' },
+  { id: 35, name: 'Filosofia e Teologia' },
+  { id: 36, name: 'Legislação e Ética Profissional' },
+  { id: 37, name: 'Legislação Específica das Agências Reguladoras' },
+  { id: 38, name: 'Legislação Específica dos Tribunais Federais' },
+  { id: 39, name: 'Legislação Tributária Federal' },
+  { id: 40, name: 'Teoria Geral, Filosofia e Sociologia Jurídica' },
+  { id: 99, name: 'Não Especificado' },
+]
+
+export const AREAS = [
+  { id: 1,  name: 'Controle' },
+  { id: 2,  name: 'Jurídica' },
+  { id: 3,  name: 'Fiscal' },
+  { id: 4,  name: 'Policial' },
+  { id: 5,  name: 'Administrativa' },
+  { id: 6,  name: 'Magistratura' },
+  { id: 7,  name: 'Saúde' },
+  { id: 8,  name: 'Docentes' },
+  { id: 9,  name: 'OAB' },
+  { id: 10, name: 'Procuradorias' },
+  { id: 11, name: 'Tribunais' },
+  { id: 98, name: 'Outras' },
+  { id: 99, name: 'Não Especificado' },
+]
+
+const currentYear = new Date().getFullYear()
+export const ANOS = Array.from(
+  { length: currentYear - 2009 },
+  (_, i) => currentYear - i
+)
