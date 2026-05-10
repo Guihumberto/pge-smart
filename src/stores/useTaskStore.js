@@ -24,7 +24,6 @@ export const useTaskStore = defineStore('tasks', () => {
     loading.value = true
     try {
       const fetched = await taskService.listByDiscipline(disciplineId)
-      console.log('fetched', fetched);
       tasks.value = [
         ...tasks.value.filter(t => t.disciplineId !== disciplineId),
         ...fetched,

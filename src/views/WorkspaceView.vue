@@ -52,7 +52,7 @@ import { ref, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { Plus } from 'lucide-vue-next'
 import { usePlanStore } from '@/stores/usePlanStore'
-import { useTaskStore } from '@/stores/useTaskStore'
+
 import { useDisciplineStore } from '@/stores/useDisciplineStore'
 import PanelDisciplines from '@/components/workspace/PanelDisciplines.vue'
 import PanelTasks from '@/components/workspace/PanelTasks.vue'
@@ -63,7 +63,6 @@ import { toast } from 'vue-sonner'
 const route  = useRoute()
 
 const planStore       = usePlanStore()
-const taskStore       = useTaskStore()
 const disciplineStore = useDisciplineStore()
 
 const activePlanId           = ref(null)
@@ -92,10 +91,7 @@ onMounted(async () => {
     }
 
     if (activePlanId.value) {
-      await Promise.all([
-        planStore.fetchGoals(activePlanId.value),
-        taskStore.fetchByPlan(activePlanId.value),
-      ])
+      await planStore.fetchGoals(activePlanId.value)
     }
   } catch (err) {
     toast.error('Erro ao carregar workspace.')
@@ -109,10 +105,7 @@ onMounted(async () => {
 watch(activePlanId, async (id) => {
   if (!id || !mounted.value) return
   try {
-    await Promise.all([
-      planStore.fetchGoals(id),
-      taskStore.fetchByPlan(id),
-    ])
+    await planStore.fetchGoals(id)
   } catch (err) {
     toast.error('Erro ao carregar dados do plano.')
   }

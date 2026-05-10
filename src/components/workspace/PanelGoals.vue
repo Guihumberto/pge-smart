@@ -2,9 +2,19 @@
   <div class="panel">
     <div class="panel__head">
       <span class="panel__label">Metas</span>
-      <button class="panel__icon-btn" title="Nova meta" @click="openGoalForm">
-        <Plus :size="14" />
-      </button>
+      <div class="panel__head-actions">
+        <template v-if="selectedIds.size > 0">
+          <button class="panel__batch-btn panel__batch-btn--danger" @click="batchDelete">
+            <Trash2 :size="12" /> Excluir ({{ selectedIds.size }})
+          </button>
+        </template>
+        <label v-if="goals.length" class="panel__select-all" title="Selecionar todas">
+          <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
+        </label>
+        <button class="panel__icon-btn" title="Nova meta" @click="openGoalForm">
+          <Plus :size="14" />
+        </button>
+      </div>
     </div>
 
     <div class="panel__body">
@@ -26,6 +36,9 @@
         >
           <div class="goal-card__head">
             <div class="goal-card__title-row">
+              <label class="goal-card__check" @click.stop>
+                <input type="checkbox" :checked="selectedIds.has(goal.id)" @change="toggleSelect(goal.id)" />
+              </label>
               <FolderOpen :size="14" class="goal-card__icon" />
               <span class="goal-card__title">{{ goal.title }}</span>
             </div>
@@ -102,6 +115,7 @@ import { useRouter } from 'vue-router'
 import { Plus, FolderOpen, Trash2, Copy, X, Eye } from 'lucide-vue-next'
 import { usePlanStore } from '@/stores/usePlanStore'
 import { useTaskStore } from '@/stores/useTaskStore'
+import { toast } from 'vue-sonner'
 
 const props = defineProps({ planId: { type: String, default: null }, draggingTask: Object })
 const emit = defineEmits(['drop-done'])
@@ -116,6 +130,7 @@ const goalForm = ref({ title: '', desc: '' })
 const copyModalOpen = ref(false)
 const copyGoalRef = ref(null)
 const copyTargetPlanId = ref(null)
+const selectedIds = ref(new Set())
 
 const goals = computed(() =>
   props.planId ? planStore.goals.filter(g => g?.planId === props.planId) : []
@@ -125,6 +140,10 @@ const otherPlans = computed(() =>
   planStore.plans.filter(p => p.id !== props.planId)
 )
 
+const allSelected = computed(() =>
+  goals.value.length > 0 && goals.value.every(g => selectedIds.value.has(g.id))
+)
+
 const getTask = (id) => taskStore.getById(id)
 
 const typeLabels = {
@@ -132,6 +151,33 @@ const typeLabels = {
   revisao: 'Rev.', lei_seca: 'Lei', outras: 'Outro',
 }
 const typeLabel = (type) => typeLabels[type] ?? '?'
+
+function toggleSelect(id) {
+  const s = new Set(selectedIds.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  selectedIds.value = s
+}
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(goals.value.map(g => g.id))
+  }
+}
+
+async function batchDelete() {
+  const count = selectedIds.value.size
+  if (!confirm(`Excluir ${count} meta(s) selecionada(s)?`)) return
+  try {
+    await Promise.all([...selectedIds.value].map(id => planStore.removeGoal(props.planId, id)))
+    toast.success(`${count} meta(s) removida(s).`)
+    selectedIds.value = new Set()
+  } catch (err) {
+    toast.error(err.message)
+  }
+}
 
 function onDrop(goalId, event) {
   const taskId = event.dataTransfer.getData('taskId')
@@ -151,7 +197,7 @@ function saveGoal() {
   goalFormOpen.value = false
 }
 
-function removeGoal(id) { planStore.removeGoal(id) }
+function removeGoal(id) { planStore.removeGoal(props.planId, id) }
 
 function previewGoal(goalId) {
   router.push({ name: 'GoalPreview', params: { planId: props.planId, goalId } })
@@ -203,19 +249,36 @@ const removeChip = (goalId, taskId) =>
   color: #999;
 }
 
+.panel__head-actions {
+  display: flex; align-items: center; gap: 6px;
+}
+
+.panel__batch-btn {
+  display: flex; align-items: center; gap: 4px;
+  font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600;
+  border: none; border-radius: 6px; padding: 4px 10px; cursor: pointer;
+}
+.panel__batch-btn--danger { background: #FEE2E2; color: #DC2626; }
+.panel__batch-btn--danger:hover { background: #FECACA; }
+
+.panel__select-all {
+  display: flex; align-items: center; cursor: pointer;
+}
+.panel__select-all input { accent-color: #534AB7; cursor: pointer; }
+
 .panel__icon-btn {
   width: 26px; height: 26px;
   border-radius: 6px;
   border: 1px solid #ebe9e4;
   background: transparent;
-  display: flex;           /* ← garante que está */
-  align-items: center;     /* ← centraliza vertical */
-  justify-content: center; /* ← centraliza horizontal */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   color: #666;
   transition: background 0.15s;
-  padding: 0;              /* ← adicione isso — padding padrão do button empurra o ícone */
-  line-height: 1;          /* ← adicione isso — reseta line-height do button */
+  padding: 0;
+  line-height: 1;
 }
 .panel__icon-btn:hover { background: #f5f4f0; }
 
@@ -259,6 +322,11 @@ const removeChip = (goalId, taskId) =>
   align-items: center;
   gap: 7px;
 }
+
+.goal-card__check {
+  display: flex; align-items: center; cursor: pointer;
+}
+.goal-card__check input { accent-color: #534AB7; cursor: pointer; }
 
 .goal-card__icon { color: #534AB7; }
 

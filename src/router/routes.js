@@ -50,6 +50,12 @@ export default [
         meta: { requiresAuth: true }
       },
       {
+        path: 'workspace/orientacao/:taskId',
+        name: 'OrientacaoView',
+        component: () => import('@/views/OrientacaoView.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
         path: 'workspace/preview/:planId/:goalId',
         name: 'GoalPreview',
         component: () => import('@/views/GoalPreviewView.vue'),
@@ -65,6 +71,36 @@ export default [
         path: 'explorar',
         name: 'PublicPlans',
         component: () => import('@/views/PublicPlansView.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'editais',
+        name: 'Editais',
+        component: () => import('@/views/EditaisView.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'editais/:id/cargos',
+        name: 'EditalCargos',
+        component: () => import('@/views/EditalCargosView.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'estatisticas',
+        name: 'Estatisticas',
+        component: () => import('@/views/EstatisticasView.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'editais/:id/cargos/:cargoId/plano',
+        name: 'PlanoEstudoBuilder',
+        component: () => import('@/views/PlanoEstudoBuilderView.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'editais/:id/cargos/:cargoId',
+        name: 'CargoConteudo',
+        component: () => import('@/views/CargoConteudoView.vue'),
         meta: { requiresAuth: true }
       },
       { path: 'mentor/plano/:id',

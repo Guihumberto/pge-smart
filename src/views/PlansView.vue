@@ -8,6 +8,15 @@
         <p class="plans__sub">Gerencie seus planos e acompanhe seus alunos</p>
       </div>
       <div class="plans__actions">
+        <button
+          v-if="planStore.plans.length"
+          class="btn-outline"
+          @click="toggleSelectMode"
+        >
+          <CheckSquare v-if="selectMode" :size="14" />
+          <Square v-else :size="14" />
+          {{ selectMode ? 'Cancelar seleção' : 'Selecionar' }}
+        </button>
         <button class="btn-outline" @click="router.push('/mentor/alunos')">
           <Users :size="14" /> Ver todos os alunos
         </button>
@@ -43,7 +52,15 @@
         v-for="plan in planStore.plans"
         :key="plan.id"
         class="plan-card"
+        :class="{ 'plan-card--selected': selectedIds.has(plan.id) }"
+        @click="selectMode ? toggleSelect(plan.id) : null"
       >
+        <!-- Checkbox de seleção -->
+        <div v-if="selectMode" class="plan-card__checkbox" @click.stop="toggleSelect(plan.id)">
+          <CheckSquare v-if="selectedIds.has(plan.id)" :size="18" class="check-icon--active" />
+          <Square v-else :size="18" class="check-icon" />
+        </div>
+
         <!-- Top -->
         <div class="plan-card__top">
           <div class="plan-card__icon">⚖</div>
@@ -131,6 +148,24 @@
       </button>
     </div>
 
+    <!-- Barra de ações de seleção -->
+    <Transition name="slide-up">
+      <div v-if="selectMode && selectedIds.size" class="selection-bar">
+        <span class="selection-bar__count">
+          {{ selectedIds.size }} plano{{ selectedIds.size > 1 ? 's' : '' }} selecionado{{ selectedIds.size > 1 ? 's' : '' }}
+        </span>
+        <div class="selection-bar__actions">
+          <button class="btn-outline-sm" @click="selectAll">
+            Selecionar todos
+          </button>
+          <button class="btn-danger-sm" @click="confirmDeleteSelected" :disabled="deleting">
+            <Trash2 :size="13" />
+            {{ deleting ? 'Excluindo...' : 'Excluir selecionados' }}
+          </button>
+        </div>
+      </div>
+    </Transition>
+
     <!-- Modal novo plano -->
     <ModalNewPlan
       v-if="showModal"
@@ -145,7 +180,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Plus, Users, MoreVertical, LayoutDashboard,
-  Copy, Trash2, Pencil, ChevronRight
+  Copy, Trash2, Pencil, ChevronRight,
+  Square, CheckSquare
 } from 'lucide-vue-next'
 import { usePlanStore } from '@/stores/usePlanStore'
 import { useEnrollmentStore } from '@/stores/useEnrollmentStore'
@@ -160,9 +196,12 @@ const enrollmentStore = useEnrollmentStore()
 const taskStore       = useTaskStore()
 const userStore       = useUserStore()
 
-const showModal = ref(false)
-const openMenu  = ref(null)
-const loading   = ref(false)
+const showModal   = ref(false)
+const openMenu    = ref(null)
+const loading     = ref(false)
+const selectMode  = ref(false)
+const selectedIds = ref(new Set())
+const deleting    = ref(false)
 
 // ── Carrega ao montar ──────────────────────────────────────
 onMounted(async () => {
@@ -214,6 +253,39 @@ const toggleMenu = (id) => {
   openMenu.value = openMenu.value === id ? null : id
 }
 window.addEventListener('click', () => { openMenu.value = null })
+
+// Seleção múltipla
+const toggleSelectMode = () => {
+  selectMode.value = !selectMode.value
+  selectedIds.value = new Set()
+}
+
+const toggleSelect = (id) => {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+const selectAll = () => {
+  selectedIds.value = new Set(planStore.plans.map(p => p.id))
+}
+
+const confirmDeleteSelected = async () => {
+  const count = selectedIds.value.size
+  if (!confirm(`Excluir ${count} plano${count > 1 ? 's' : ''}? Esta ação não pode ser desfeita.`)) return
+  deleting.value = true
+  try {
+    await Promise.all([...selectedIds.value].map(id => planStore.removePlan(id)))
+    toast.success(`${count} plano${count > 1 ? 's' : ''} excluído${count > 1 ? 's' : ''}.`)
+    selectedIds.value = new Set()
+    selectMode.value = false
+  } catch (err) {
+    toast.error(err.message)
+  } finally {
+    deleting.value = false
+  }
+}
 
 // Ações
 const onCreated = (planId) => {
@@ -293,12 +365,21 @@ const confirmDelete = async (id) => {
 
 /* Plan card */
 .plan-card {
+  position: relative;
   background: #fff; border: 1px solid #ebe9e4;
   border-radius: 14px; padding: 20px;
   display: flex; flex-direction: column; gap: 16px;
   transition: border-color 0.15s, transform 0.15s;
 }
 .plan-card:hover { border-color: #AFA9EC; transform: translateY(-2px); }
+.plan-card--selected { border-color: #534AB7; background: #f8f7ff; }
+
+.plan-card__checkbox {
+  position: absolute; top: 12px; left: 12px;
+  cursor: pointer; z-index: 5;
+}
+.check-icon { color: #ccc; }
+.check-icon--active { color: #534AB7; }
 
 .plan-card__top {
   display: flex; align-items: flex-start; gap: 12px;
@@ -441,4 +522,41 @@ const confirmDelete = async (id) => {
 .empty-state__icon { font-size: 40px; }
 .empty-state__title { font-size: 16px; font-weight: 700; color: #1a1a2e; margin: 0; }
 .empty-state__desc  { font-size: 13px; color: #aaa; max-width: 360px; margin: 0; line-height: 1.6; }
+
+/* Selection bar */
+.selection-bar {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #1a1a2e; color: #fff;
+  border-radius: 12px; padding: 12px 20px;
+  display: flex; align-items: center; gap: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  z-index: 100;
+}
+.selection-bar__count {
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.selection-bar__actions {
+  display: flex; gap: 8px;
+}
+
+.btn-danger-sm {
+  display: flex; align-items: center; gap: 5px;
+  font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600;
+  background: #c0392b; color: #fff; border: none;
+  border-radius: 7px; padding: 7px 12px;
+  cursor: pointer; transition: background 0.15s;
+}
+.btn-danger-sm:hover { background: #a93226; }
+.btn-danger-sm:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Transition */
+.slide-up-enter-active, .slide-up-leave-active {
+  transition: all 0.25s ease;
+}
+.slide-up-enter-from, .slide-up-leave-to {
+  opacity: 0; transform: translateX(-50%) translateY(20px);
+}
+.slide-up-enter-to, .slide-up-leave-from {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
 </style>

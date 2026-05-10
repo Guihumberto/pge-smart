@@ -34,6 +34,9 @@ export function parseArticles(raw) {
       if (start > end) {
         return { resolved: [], error: `Início maior que fim: "${part}"` }
       }
+      if (end - start + 1 > 500) {
+        return { resolved: [], error: `Intervalo muito grande (máx. 500 artigos): "${part}"` }
+      }
       for (let i = start; i <= end; i++) resolved.add(i)
     } else {
       const num = parseInt(part)
@@ -64,7 +67,7 @@ export function formatArticles(nums) {
   let start = sorted[0]
   let prev = sorted[0]
 
-  for (let i = 1; i <= sorted.length; i++) {
+  for (let i = 1; i < sorted.length; i++) {
     const curr = sorted[i]
     if (curr === prev + 1) {
       prev = curr
@@ -74,6 +77,7 @@ export function formatArticles(nums) {
       prev = curr
     }
   }
+  ranges.push(start === prev ? `${start}` : `${start}–${prev}`)
 
   return 'Art. ' + ranges.join(', ')
 }

@@ -1,0 +1,303 @@
+<!-- Fixture: HTML real do QConcursos coletado por Humberto via inspect element em 2026-05-07. Estrutura tipica indice-conteudo com 3 niveis aninhados. Conteudo truncado no fim (limite de 50KB da mensagem) — fechado manualmente abaixo para manter o HTML bem-formado. -->
+<ul class="indice-conteudo">
+                        <!-- ngRepeat: assunto in vm.assuntos --><!-- ngInclude: 'indice-arvore' --><li ng-repeat="assunto in vm.assuntos" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+		<!-- ngIf: vm.indiceEmEdicao -->
+        <span class="icone-arvore expandir" ng-click="vm.expandirAssunto(assunto)">
+			<span id="" class="glyphicon glyphicon-triangle-right " title="" ng-show="assunto.ocultar &amp;&amp; vm.temFilhos(assunto)" aria-label="recolhido"></span><span id="" class="glyphicon glyphicon-triangle-bottom  ng-hide" title="" ng-show="!assunto.ocultar &amp;&amp; vm.temFilhos(assunto)" aria-label="expandido"></span><span ng-show="!vm.temFilhos(assunto)" class="icone-bola ng-hide" aria-hidden="true"></span>
+		</span>
+        <a href="" class="assunto-nome Materia" ng-click="vm.irParaQuestao(assunto.indice)" aria-expanded="false">
+            <span class="assunto-nome-conteudo ng-binding">Administração de Recursos Materiais</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope" ng-if="vm.distribuidoPor.tipo == 'QUANTIDADE'">
+					1 (0.14%)
+				</span>
+			</div>
+		</span>
+    </div>
+    <ul ng-hide="assunto.ocultar" class="ng-scope ng-hide">
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <span class="icone-arvore expandir" ng-click="vm.expandirAssunto(assunto)">
+			<span class="glyphicon glyphicon-triangle-right "></span>
+		</span>
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Gestão de Estoques</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					1 (0.14%)
+				</span>
+			</div>
+		</span>
+    </div>
+    <ul ng-hide="assunto.ocultar" class="ng-scope ng-hide">
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Planejamento e Controle de Estoques</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					1 (0.14%)
+				</span>
+			</div>
+		</span>
+    </div>
+</li>
+    </ul>
+</li>
+    </ul>
+</li>
+
+<li ng-repeat="assunto in vm.assuntos" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Materia">
+            <span class="assunto-nome-conteudo ng-binding">Administração Geral e Pública</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					19 (2.57%)
+				</span>
+			</div>
+		</span>
+    </div>
+    <ul ng-hide="assunto.ocultar" class="ng-scope ng-hide">
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Introdução à Administração</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					1 (0.14%)
+				</span>
+			</div>
+		</span>
+    </div>
+    <ul ng-hide="assunto.ocultar" class="ng-scope ng-hide">
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Administrador</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					1 (0.14%)
+				</span>
+			</div>
+		</span>
+    </div>
+</li>
+    </ul>
+</li>
+
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Modelos Teóricos de Gestão Pública</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					1 (0.14%)
+				</span>
+			</div>
+		</span>
+    </div>
+    <ul ng-hide="assunto.ocultar" class="ng-scope ng-hide">
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Administração Patrimonialista</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					1 (0.14%)
+				</span>
+			</div>
+		</span>
+    </div>
+</li>
+    </ul>
+</li>
+
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Processo de Planejamento</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					5 (0.68%)
+				</span>
+			</div>
+		</span>
+    </div>
+    <ul ng-hide="assunto.ocultar" class="ng-scope ng-hide">
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Diagnóstico de Ambiente Organizacional - Matriz SWOT</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					2 (0.27%)
+				</span>
+			</div>
+		</span>
+    </div>
+</li>
+
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Indicadores de Desempenho</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					1 (0.14%)
+				</span>
+			</div>
+		</span>
+    </div>
+</li>
+
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Balanced Scorecard (BSC)</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					2 (0.27%)
+				</span>
+			</div>
+		</span>
+    </div>
+</li>
+    </ul>
+</li>
+
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Comportamento Organizacional</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					3 (0.41%)
+				</span>
+			</div>
+		</span>
+    </div>
+    <ul ng-hide="assunto.ocultar" class="ng-scope ng-hide">
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Cultura Organizacional</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					1 (0.14%)
+				</span>
+			</div>
+		</span>
+    </div>
+</li>
+
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Motivação</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					2 (0.27%)
+				</span>
+			</div>
+		</span>
+    </div>
+</li>
+    </ul>
+</li>
+    </ul>
+</li>
+
+<li ng-repeat="assunto in vm.assuntos" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Materia">
+            <span class="assunto-nome-conteudo ng-binding">AFO, Direito Financeiro e Contabilidade Pública</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					55 (7.43%)
+				</span>
+			</div>
+		</span>
+    </div>
+    <ul ng-hide="assunto.ocultar" class="ng-scope ng-hide">
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Orçamento Público</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					7 (0.95%)
+				</span>
+			</div>
+		</span>
+    </div>
+    <ul ng-hide="assunto.ocultar" class="ng-scope ng-hide">
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Classificações do Orçamento Público</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					2 (0.27%)
+				</span>
+			</div>
+		</span>
+    </div>
+</li>
+
+        <li ng-repeat="assunto in assunto.subTree" ng-include="'indice-arvore'" class="ng-scope">
+	<div class="assunto assunto-indice ng-scope">
+        <a href="" class="assunto-nome Assunto">
+            <span class="assunto-nome-conteudo ng-binding">Princípios Orçamentários</span>
+        </a>
+        <span class="assunto-pagina-edicao">
+			<div class="edicao">
+				<span class="indice-porcentagem ng-binding ng-scope">
+					3 (0.41%)
+				</span>
+			</div>
+		</span>
+    </div>
+</li>
+    </ul>
+</li>
+    </ul>
+</li>
+</ul>

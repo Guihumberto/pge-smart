@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import { planService } from '@/services/plan.service'
 import { goalService } from '@/services/goal.service'
 import { toast } from 'vue-sonner'
+import { useTaskStore } from '@/stores/useTaskStore'
+import { useEnrollmentStore } from '@/stores/useEnrollmentStore'
 
 export const usePlanStore = defineStore('plans', () => {
   const plans   = ref([])
@@ -14,7 +16,10 @@ export const usePlanStore = defineStore('plans', () => {
     loading.value = true
     try {
       plans.value = await planService.list()
-      goals.value = goals.value.filter(g => g != null) // ← sanitiza ao carregar
+
+      // Sanitiza: remove nulls e metas órfãs de planos que não existem mais
+      const planIds = new Set(plans.value.map(p => p.id))
+      goals.value = goals.value.filter(g => g != null && planIds.has(g.planId))
     } finally {
       loading.value = false
     }
@@ -39,6 +44,15 @@ export const usePlanStore = defineStore('plans', () => {
     await planService.remove(id)
     plans.value = plans.value.filter(p => p.id !== id)
     goals.value = goals.value.filter(g => g.planId !== id)
+
+    // Limpa tasks, enrollments e links associados ao plano removido
+    const taskStore = useTaskStore()
+    taskStore.tasks = taskStore.tasks.filter(t => t.planId !== id)
+
+    const enrollmentStore = useEnrollmentStore()
+    enrollmentStore.enrollments = enrollmentStore.enrollments.filter(e => e.planId !== id)
+    enrollmentStore.inviteLinks = enrollmentStore.inviteLinks.filter(l => l.planId !== id)
+
     toast.success('Plano removido.')
   }
 

@@ -155,7 +155,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store.js'
 import {
   Menu, Info, User, LogOut, BookOpen, Target,
-  ChevronDown, LayoutDashboard, ChevronLeft, Compass
+  ChevronDown, LayoutDashboard, ChevronLeft, Compass, FileText, BarChart3
 } from 'lucide-vue-next'
 import ConnectionBanner from '@/components/ui/ConnectionBanner.vue'
 
@@ -175,6 +175,8 @@ const menuItems = [
   { title: 'Minhas Metas', icon: Target,          to: '/metas',          section: 'aluno' },
   { title: 'Meus Planos',  icon: BookOpen,        to: '/planos',         section: 'mentor' },
   { title: 'Workspace',    icon: LayoutDashboard, to: '/workspace',      section: 'mentor' },
+  { title: 'Editais',      icon: FileText,        to: '/editais',        section: 'mentor' },
+  { title: 'Estatísticas', icon: BarChart3,       to: '/estatisticas',   section: 'mentor' },
   { title: 'Alunos',       icon: User,            to: '/mentor/alunos',  section: 'mentor' },
   { title: 'Sobre',        icon: Info,            to: '/about' },
 ]

@@ -293,15 +293,25 @@ O workspace e dividido em 3 paineis:
 2. **Tarefas** (centro): Tarefas da disciplina selecionada. Arrastavel para metas.
 3. **Metas** (direita): Metas do plano com tarefas vinculadas. Drop zone para tarefas.
 
+#### Operacoes em Lote (PanelTasks)
+
+O painel de tarefas suporta selecao via checkboxes (individual + selecionar todas):
+- **Excluir em lote**: botao vermelho "Excluir (N)" com confirmacao
+- **Duplicar em lote**: botao roxo "Duplicar (N)" — cria copias com titulo "(copia)", sem copiar `id`, `orientationDocId`, timestamps
+
 #### Criacao de Tarefa (ModalTask)
 
 O modal suporta 6 tipos de tarefa. Para **Lei Seca**, o formulario inclui:
 
-- **Lei fonte** (`lawSource`): ID da norma no Elasticsearch
+- **Lei fonte** (`lawSource`): ID da norma no Elasticsearch (autocomplete com debounce 400ms)
 - **Artigos** (`articlesRaw`): Range como "1 a 5, 45" que e parseado para [1,2,3,4,5,45]
 - **Filtros da lei**: compilado, com marcacoes, com tags, filtro de tags
 - **Questoes vinculadas**: tipo de resposta, banca, ano, disciplina, area, favoritas
+- **Contagem em tempo real**: atualiza automaticamente via watcher com debounce 700ms
 - **Orientacao**: Texto de orientacao para o aluno
+- **Salvar sem fechar**: icone de disquete ao lado do botao "Salvar alteracoes" que salva mantendo o modal aberto
+
+**Nota tecnica**: ao abrir para edicao, `validateArticles()` e `fetchQuestionCount()` sao chamados via `nextTick()` no watcher de `props.task` para garantir que artigos identificados e contagem de questoes aparecam imediatamente (os watchers subsequentes de `articlesRaw` e `formQuestions` ainda nao estao registrados quando o watcher `immediate` roda durante o setup).
 
 ### Gestao de Alunos (PlanManageView)
 

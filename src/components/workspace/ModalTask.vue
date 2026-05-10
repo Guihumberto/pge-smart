@@ -340,29 +340,39 @@
                 </template>
               </div>
 
-              <!-- Gerar PDF de Estudo -->
-              <div v-if="questionCount > 0 && !countLoading" class="study-pdf-section">
-                <button
-                  class="btn-study-pdf"
-                  :disabled="pdfGenerating"
-                  @click="requestStudyPdf"
-                >
-                  <FileText :size="13" />
-                  {{ pdfGenerating ? 'Gerando PDF...' : 'Gerar PDF de Estudo' }}
-                </button>
-
-                <div v-if="pdfGenerating" class="study-pdf-progress">
-                  <span class="question-count__spinner"></span>
-                  Analisando questões com IA... isso pode levar alguns minutos.
-                </div>
-
-                <div v-if="pdfReady" class="study-pdf-ready">
-                  <button class="btn-download-pdf" @click="downloadStudyPdf">
-                    <Download :size="13" /> Baixar PDF de Estudo
+              <!-- Gerar Orientação IA -->
+              <div v-if="questionCount > 0 && !countLoading" class="orientation-ia-section">
+                <template v-if="isEditing && props.task?.id">
+                  <template v-if="props.task?.orientationDocId">
+                    <button class="btn-orientation" @click="viewOrientation">
+                      <Sparkles :size="13" /> Ver Orientação
+                    </button>
+                    <button class="btn-link" @click="regenerateOrientation" :disabled="orientationGenerating">
+                      {{ orientationGenerating ? 'Regenerando...' : 'Regenerar' }}
+                    </button>
+                  </template>
+                  <template v-else>
+                    <button
+                      class="btn-orientation"
+                      :disabled="orientationGenerating"
+                      @click="generateOrientation"
+                    >
+                      <Sparkles :size="13" />
+                      {{ orientationGenerating ? 'Gerando orientação...' : 'Gerar Orientação IA' }}
+                    </button>
+                    <div v-if="orientationGenerating" class="orientation-progress">
+                      <span class="question-count__spinner"></span>
+                      Analisando questões e gerando orientação... isso pode levar até 1 minuto.
+                    </div>
+                  </template>
+                </template>
+                <template v-else>
+                  <button class="btn-orientation" disabled title="Salve a tarefa primeiro">
+                    <Sparkles :size="13" /> Gerar Orientação IA
                   </button>
-                </div>
-
-                <p v-if="pdfError" class="field__error">{{ pdfError }}</p>
+                  <p class="field__hint">Salve a tarefa primeiro para gerar a orientação.</p>
+                </template>
+                <p v-if="orientationError" class="field__error">{{ orientationError }}</p>
               </div>
             </div>
           </div>
@@ -374,13 +384,23 @@
       <!-- Ações -->
       <div class="modal__footer">
         <button class="btn-ghost" @click="$emit('close')">Cancelar</button>
-        <button
-          class="btn-primary"
-          :disabled="!isValid"
-          @click="save"
-        >
-          {{ isEditing ? 'Salvar alterações' : 'Criar tarefa' }}
-        </button>
+        <div class="modal__footer-save">
+          <button
+            class="btn-primary"
+            :disabled="!isValid || saving"
+            @click="save(true)"
+          >
+            {{ saving ? 'Salvando...' : (isEditing ? 'Salvar alterações' : 'Criar tarefa') }}
+          </button>
+          <button
+            class="btn-save-stay"
+            title="Salvar sem fechar"
+            :disabled="!isValid || saving"
+            @click.stop="save(false)"
+          >
+            <Save :size="14" />
+          </button>
+        </div>
       </div>
 
     </div>
@@ -388,17 +408,19 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   X, Link2, Settings2, BookOpen, Plus, Pencil,
   Trash2, Scale, FileText, HelpCircle, Video,
-  RefreshCw, MoreHorizontal, Eye, Tag, MessageSquare, ChevronDown, Download
+  RefreshCw, MoreHorizontal, Eye, Tag, MessageSquare, ChevronDown, Sparkles, Save
 } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
 import { useTaskStore } from '@/stores/useTaskStore'
 import { useDisciplineStore } from '@/stores/useDisciplineStore'
 import { useOrientationStore } from '@/stores/useOrientationStore'
 import { parseArticles } from '@/utils/articleParser'
 import { questionService } from '@/services/question.service'
+import { taskOrientationService } from '@/services/taskOrientation.service'
 import { lawService } from '@/services/law.service'
 import { BANCAS, DISCIPLINAS, AREAS, ANOS } from '@/utils/questionDicts'
 import { toast } from 'vue-sonner'
@@ -500,6 +522,16 @@ watch(() => props.task, (task) => {
     } else {
       selectedLaw.value = null
     }
+
+    // Força recálculo dos artigos e contagem de questões,
+    // pois os watchers de articlesRaw e formQuestions ainda não
+    // estão registrados quando este watcher immediate roda no setup.
+    nextTick(() => {
+      validateArticles()
+      if (form.value.filterLaw.withQuestions) {
+        fetchQuestionCount()
+      }
+    })
   } else {
     form.value = defaultForm()
     selectedLaw.value = null
@@ -636,7 +668,8 @@ const closeDropdowns = () => { openDropdown.value = null }
 onMounted(() => document.addEventListener('click', closeDropdowns))
 onUnmounted(() => {
   document.removeEventListener('click', closeDropdowns)
-  clearInterval(pdfPollTimer)
+  clearTimeout(lawSearchTimer)
+  clearTimeout(countTimer)
 })
 
 // Labels computados para cada campo
@@ -692,7 +725,7 @@ watch(
 )
 
 async function fetchQuestionCount() {
-  if (!form.value.filterLaw.withQuestions) return
+  if (!form.value.filterLaw.withQuestions || !form.value.lawSource) return
   countLoading.value = true
   try {
     questionCount.value = await questionService.countByFilters({
@@ -707,75 +740,43 @@ async function fetchQuestionCount() {
   }
 }
 
-// ── Geração de PDF de Estudo (IA) ─────────────────────────
-const pdfGenerating = ref(false)
-const pdfReady = ref(false)
-const pdfTaskId = ref(null)
-const pdfError = ref(null)
-let pdfPollTimer = null
+// ── Orientação IA ─────────────────────────────────────────
+const router = useRouter()
+const orientationGenerating = ref(false)
+const orientationError = ref(null)
 
-async function requestStudyPdf() {
-  pdfGenerating.value = true
-  pdfReady.value = false
-  pdfError.value = null
-
+async function generateOrientation() {
+  orientationGenerating.value = true
+  orientationError.value = null
   try {
-    const result = await questionService.generateStudyPdf({
-      norma:         form.value.lawSource,
-      lawName:       selectedLaw.value?.name ?? '',
-      artsFilter:    resolvedArticles.value,
-      articles:      resolvedArticles.value.map(String),
-      banca:         form.value.formQuestions.banca,
-      ano:           form.value.formQuestions.ano,
-      id_disciplina: form.value.formQuestions.id_disciplina,
-      id_area:       form.value.formQuestions.id_area,
-    })
-    pollPdfStatus(result.taskId)
+    await taskOrientationService.generate(props.task.id)
+    toast.success('Orientação gerada com sucesso!')
+    router.push({ name: 'OrientacaoView', params: { taskId: props.task.id } })
   } catch (err) {
-    pdfError.value = err.message
-    pdfGenerating.value = false
+    orientationError.value = err.response?.data?.message || err.message
+  } finally {
+    orientationGenerating.value = false
   }
 }
 
-function pollPdfStatus(taskId) {
-  pdfPollTimer = setInterval(async () => {
-    try {
-      const status = await questionService.getStudyPdfStatus(taskId)
-      if (status.status === 'completed') {
-        clearInterval(pdfPollTimer)
-        pdfGenerating.value = false
-        pdfReady.value = true
-        pdfTaskId.value = taskId
-        toast.success('PDF de estudo gerado com sucesso!')
-      } else if (status.status === 'failed') {
-        clearInterval(pdfPollTimer)
-        pdfGenerating.value = false
-        pdfError.value = status.error || 'Erro ao gerar o PDF'
-      }
-    } catch {
-      clearInterval(pdfPollTimer)
-      pdfGenerating.value = false
-      pdfError.value = 'Erro ao verificar status da geração'
-    }
-  }, 3000)
+async function regenerateOrientation() {
+  if (!confirm('Isso irá excluir a orientação atual e gerar uma nova. Continuar?')) return
+  orientationGenerating.value = true
+  orientationError.value = null
+  try {
+    await taskOrientationService.remove(props.task.id)
+    await taskOrientationService.generate(props.task.id)
+    toast.success('Orientação regenerada com sucesso!')
+    router.push({ name: 'OrientacaoView', params: { taskId: props.task.id } })
+  } catch (err) {
+    orientationError.value = err.response?.data?.message || err.message
+  } finally {
+    orientationGenerating.value = false
+  }
 }
 
-async function downloadStudyPdf() {
-  try {
-    const blob = await questionService.downloadStudyPdf(pdfTaskId.value)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    const lawLabel = String(selectedLaw.value?.name || 'lei').replace(/[<>:"/\\|?*]/g, '').trim()
-    a.download = `${lawLabel}.pdf`
-    a.style.display = 'none'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-  } catch (err) {
-    toast.error('Erro ao baixar PDF: ' + err.message)
-  }
+function viewOrientation() {
+  router.push({ name: 'OrientacaoView', params: { taskId: props.task.id } })
 }
 
 // ── Validação geral ────────────────────────────────────────
@@ -786,8 +787,11 @@ const isValid = computed(() => {
 })
 
 // ── Salvar ─────────────────────────────────────────────────
-async function save() {
-  if (!isValid.value) return
+const saving = ref(false)
+
+async function save(closeAfter = true) {
+  if (!isValid.value || saving.value) return
+  saving.value = true
 
   const isLeiSeca = form.value.type === 'lei_seca'
 
@@ -814,9 +818,11 @@ async function save() {
       await taskStore.create(props.disciplineId, payload)
       toast.success('Tarefa criada!')
     }
-    emit('saved')
+    if (closeAfter) emit('saved')
   } catch (err) {
     toast.error(err.message)
+  } finally {
+    saving.value = false
   }
 }
 </script>
@@ -1462,7 +1468,40 @@ async function save() {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  align-items: center;
   padding-top: 4px;
+}
+
+.modal__footer-save {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-save-stay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #ebe9e4;
+  background: #fafaf8;
+  color: #534AB7;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-save-stay:hover {
+  background: #EEEDFE;
+  border-color: #AFA9EC;
+}
+.btn-save-stay:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-save-stay :deep(svg) {
+  color: #534AB7;
+  flex-shrink: 0;
 }
 
 .btn-ghost {
@@ -1607,14 +1646,15 @@ async function save() {
 }
 
 /* ── Study PDF Section ───────────────────────────────────── */
-.study-pdf-section {
+/* Orientação IA */
+.orientation-ia-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-top: 4px;
 }
 
-.btn-study-pdf {
+.btn-orientation {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1622,49 +1662,27 @@ async function save() {
   width: 100%;
   padding: 9px 16px;
   border-radius: 8px;
-  border: 1.5px dashed #534AB7;
-  background: #f7f6ff;
+  border: 1.5px dashed #7c3aed;
+  background: #f5f3ff;
   font-family: 'DM Sans', sans-serif;
   font-size: 12.5px;
   font-weight: 600;
-  color: #534AB7;
+  color: #7c3aed;
   cursor: pointer;
   transition: all 0.15s;
 }
-.btn-study-pdf:hover { background: #EEEDFE; border-style: solid; }
-.btn-study-pdf:disabled { opacity: 0.5; cursor: not-allowed; border-style: dashed; }
+.btn-orientation:hover { background: #ede9fe; border-style: solid; }
+.btn-orientation:disabled { opacity: 0.5; cursor: not-allowed; border-style: dashed; }
 
-.study-pdf-progress {
+.orientation-progress {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
   border-radius: 8px;
   font-size: 12px;
-  color: #92400e;
+  color: #5b21b6;
 }
-
-.study-pdf-ready {
-  display: flex;
-}
-
-.btn-download-pdf {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  padding: 9px 16px;
-  border-radius: 8px;
-  background: #15803d;
-  font-family: 'DM Sans', sans-serif;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #fff;
-  text-decoration: none;
-  transition: background 0.15s;
-}
-.btn-download-pdf:hover { background: #166534; }
 </style>

@@ -1,0 +1,170 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import { cargoService } from '@/services/cargo.service'
+import { toast } from 'vue-sonner'
+
+export const useCargoStore = defineStore('cargos', () => {
+  const cargos = ref([])
+  const cargoAtual = ref(null)
+  const loading = ref(false)
+  const parseStatus = ref(null)
+
+  async function fetchCargos(editalId) {
+    loading.value = true
+    try {
+      cargos.value = await cargoService.list(editalId)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchCargo(editalId, cargoId) {
+    loading.value = true
+    try {
+      cargoAtual.value = await cargoService.get(editalId, cargoId)
+      return cargoAtual.value
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function createCargo(editalId, data) {
+    const cargo = await cargoService.create(editalId, data)
+    cargos.value.push(cargo)
+    toast.success('Cargo adicionado!')
+    return cargo
+  }
+
+  async function updateCargo(editalId, cargoId, patch) {
+    const updated = await cargoService.update(editalId, cargoId, patch)
+    const idx = cargos.value.findIndex(c => c.id === cargoId)
+    if (idx !== -1) cargos.value[idx] = updated
+    if (cargoAtual.value?.id === cargoId) cargoAtual.value = updated
+    toast.success('Cargo atualizado!')
+    return updated
+  }
+
+  async function removeCargo(editalId, cargoId) {
+    await cargoService.remove(editalId, cargoId)
+    cargos.value = cargos.value.filter(c => c.id !== cargoId)
+    if (cargoAtual.value?.id === cargoId) cargoAtual.value = null
+    toast.success('Cargo removido.')
+  }
+
+  /**
+   * Envia 1 disciplina por chamada para o backend parsear.
+   * O backend processa sequencialmente; o front sempre chama com 1 bloco.
+   * Em caso de erro, NÃO mostra toast — quem chama (loop da view) decide.
+   */
+  async function enviarParse(editalId, cargoId, bloco) {
+    parseStatus.value = 'processando'
+    try {
+      const result = await cargoService.parse(editalId, cargoId, { blocos: [bloco] })
+      parseStatus.value = 'concluido'
+      return result
+    } catch (err) {
+      parseStatus.value = 'erro'
+      throw err
+    }
+  }
+
+  async function salvarConteudo(editalId, cargoId, conteudoParseado) {
+    const updated = await cargoService.update(editalId, cargoId, {
+      conteudo_parseado: stripUiFlags(conteudoParseado),
+      parse_status: 'concluido',
+    })
+    const idx = cargos.value.findIndex(c => c.id === cargoId)
+    if (idx !== -1) cargos.value[idx] = updated
+    if (cargoAtual.value?.id === cargoId) cargoAtual.value = updated
+    toast.success('Conteúdo salvo!')
+    return updated
+  }
+
+  /**
+   * Remove flags de UI (props que começam com '_') de qualquer objeto/array,
+   * recursivamente. Mantém o domínio limpo no Elasticsearch.
+   */
+  function stripUiFlags(value) {
+    if (Array.isArray(value)) return value.map(stripUiFlags)
+    if (value && typeof value === 'object') {
+      const out = {}
+      for (const [k, v] of Object.entries(value)) {
+        if (k.startsWith('_')) continue
+        out[k] = stripUiFlags(v)
+      }
+      return out
+    }
+    return value
+  }
+
+  async function analisarConteudo(editalId, cargoId, { area, disciplinas } = {}) {
+    try {
+      const result = await cargoService.analisar(editalId, cargoId, { area, disciplinas })
+      if (cargoAtual.value?.id === cargoId) cargoAtual.value = result
+      const idx = cargos.value.findIndex(c => c.id === cargoId)
+      if (idx !== -1) cargos.value[idx] = result
+      return result
+    } catch (err) {
+      toast.error(err.message || 'Erro na análise')
+      throw err
+    }
+  }
+
+  // ── Vinculação de normas ────────────────────────────────────
+
+  async function getLeisSugestoes(editalId, cargoId) {
+    try {
+      return await cargoService.getLeisSugestoes(editalId, cargoId)
+    } catch (err) {
+      toast.error(err.message || 'Erro ao buscar sugestões de normas')
+      throw err
+    }
+  }
+
+  async function regerarLeisSugestoes(editalId, cargoId) {
+    try {
+      const result = await cargoService.regerarLeisSugestoes(editalId, cargoId)
+      toast.success('Sugestões recalculadas')
+      return result
+    } catch (err) {
+      toast.error(err.message || 'Erro ao recalcular sugestões')
+      throw err
+    }
+  }
+
+  async function vincularLei(editalId, cargoId, payload) {
+    try {
+      return await cargoService.vincularLei(editalId, cargoId, payload)
+    } catch (err) {
+      toast.error(err.message || 'Erro ao vincular norma')
+      throw err
+    }
+  }
+
+  async function mudarStatusLei(editalId, cargoId, normaId, status) {
+    try {
+      return await cargoService.mudarStatusLei(editalId, cargoId, normaId, status)
+    } catch (err) {
+      toast.error(err.message || 'Erro ao mudar status')
+      throw err
+    }
+  }
+
+  async function desvincularLei(editalId, cargoId, normaId) {
+    try {
+      return await cargoService.desvincularLei(editalId, cargoId, normaId)
+    } catch (err) {
+      toast.error(err.message || 'Erro ao desvincular norma')
+      throw err
+    }
+  }
+
+  return {
+    cargos, cargoAtual, loading, parseStatus,
+    fetchCargos, fetchCargo, createCargo, updateCargo, removeCargo,
+    enviarParse, salvarConteudo, analisarConteudo,
+    getLeisSugestoes, regerarLeisSugestoes, vincularLei, mudarStatusLei, desvincularLei,
+  }
+}, {
+  persist: { key: 'cargos', paths: ['cargos'] }
+})
