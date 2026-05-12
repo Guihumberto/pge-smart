@@ -308,9 +308,11 @@ function toRomano(n) {
 }
 
 function nivelDeBolinhas(score) {
+  // Mapeamento spec §5.4: faixas semi-abertas de 20% com [0.80, 1.00] fechado
+  // no topo. floor(c*5)+1 dá o nível correto nos boundaries (0.20 → 2, não 1).
   if (score == null || Number.isNaN(score)) return 0
   const c = Math.max(0, Math.min(1, Number(score)))
-  return Math.max(1, Math.ceil(c * 5))
+  return Math.min(5, Math.floor(c * 5) + 1)
 }
 
 function scoreParaBolinhas(score) {
@@ -325,25 +327,33 @@ function normSubSubs(arr) {
     .filter(Boolean)
 }
 
+let primeiraCarga = true
 async function fetchData() {
   loading.value = true
   errorFetch.value = null
   // Reset defensivo: garante estado limpo em retry após falha parcial
   cargo.value = null
   edital.value = null
-  try {
-    const [c, e] = await Promise.all([
-      cargoService.get(editalId, cargoId),
-      editalService.get(editalId),
-    ])
-    cargo.value = c
-    edital.value = e
-    mostrarPriorizacao.value = !!c.priorizacao?.disciplinas?.length
-  } catch (err) {
-    errorFetch.value = err?.message || 'Erro desconhecido'
-  } finally {
+  // Resiliência: front degrada igual ao back. Se cargoService falha, é erro.
+  // Se editalService falha (edital deletado), seguimos sem subtítulo na capa.
+  const [resCargo, resEdital] = await Promise.allSettled([
+    cargoService.get(editalId, cargoId),
+    editalService.get(editalId),
+  ])
+  if (resCargo.status === 'rejected') {
+    errorFetch.value = resCargo.reason?.message || 'Não foi possível carregar o cargo'
     loading.value = false
+    return
   }
+  cargo.value = resCargo.value
+  edital.value = resEdital.status === 'fulfilled' ? resEdital.value : null
+  // Auto-ligar priorização só na PRIMEIRA carga; preserva preferência do user
+  // em retries (caso o user tenha desligado o toggle manualmente antes).
+  if (primeiraCarga) {
+    mostrarPriorizacao.value = !!resCargo.value.priorizacao?.disciplinas?.length
+    primeiraCarga = false
+  }
+  loading.value = false
 }
 
 async function baixarPdf() {
