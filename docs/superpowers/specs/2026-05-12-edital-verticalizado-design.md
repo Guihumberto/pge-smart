@@ -46,9 +46,10 @@ Além do uso funcional, o artefato deve ter **qualidade editorial** suficiente p
                                                                     mostrarAnotacoes,
                                                                     mostrarCheckbox }
                                                                        │
-                                                                       ├─ cargoService.getById(cargoId)
-                                                                       ├─ buildConteudoVerticalHtml(cargo, opts)
-                                                                       ├─ htmlToPdf(html)   [já existe]
+                                                                       ├─ findCargoById(cargoId, userId)
+                                                                       ├─ findEditalById(cargo.editalId)
+                                                                       ├─ buildConteudoVerticalHtml({ cargo, edital }, opts)
+                                                                       ├─ htmlToPdf(html, pdfOpts)   [já existe + ajuste §10]
                                                                        └─ retorna Buffer PDF
 ```
 
@@ -56,6 +57,7 @@ Além do uso funcional, o artefato deve ter **qualidade editorial** suficiente p
 - A PrintView é a fonte da verdade visual para o navegador.
 - O backend **reconstrói** o HTML em Node a partir do `cargo` lido do DB — nunca recebe HTML do frontend (segurança + consistência).
 - As regras CSS de paginação (`page-break-*`, `orphans`, `widows`) ficam duplicadas (PrintView + backend) em arquivos pequenos e bem-isolados. As duplicações são as regras de paginação e a paleta — não a estrutura. A duplicação é aceitável por ser pequena e disciplinada; se crescer, considera-se Phase 2 (template compartilhado).
+- **Fonte de dados do conteúdo** muda conforme o toggle de priorização: ON → `cargo.priorizacao.disciplinas` (com scores, leis e justificativa já embutidos pelo passo de análise). OFF → `cargo.conteudo_parseado.disciplinas` (estrutura crua direto do parse). PrintView e backend usam a **mesma lógica de seleção**.
 
 ## 4. Componentes
 
@@ -68,22 +70,33 @@ Além do uso funcional, o artefato deve ter **qualidade editorial** suficiente p
 
 ### 4.2 `PrintView.vue` (novo)
 
-- Rota nova em `router/routes.js`: path `/editais/:editalId/cargos/:cargoId/imprimir`, name `CargoImprimir`, lazy import.
-- Componente busca cargo via `cargoService.getById(editalId, cargoId)` no `onMounted`.
+- Rota nova em `router/routes.js`: aninhada ao `DefaultLayout.vue`, path `editais/:id/cargos/:cargoId/imprimir`, name `CargoImprimir`, lazy import. (Mantém o padrão existente: param do edital se chama `:id`, padrão das demais rotas em `editais/:id/cargos/...`.)
+- `onMounted` busca **em paralelo**:
+  - `cargoService.get(editalId, cargoId)` → cargo (com `conteudo_parseado` e `priorizacao`).
+  - `editalService.get(editalId)` → edital (precisamos de `nome`, `ano`, `orgao` para capa e header recorrente).
+- **Fonte de dados para renderização:**
+  - Toggle "priorização" ON → renderiza `cargo.priorizacao.disciplinas` (tem scores, justificativa, leis vinculadas embutidas).
+  - Toggle "priorização" OFF → renderiza `cargo.conteudo_parseado.disciplinas` (estrutura crua sem badges).
 - Toggles topo (sticky até o usuário rolar; oculto em `@media print`):
-  - `mostrarPriorizacao` (default `true`; desabilitado com tooltip se `!cargo.priorizacao?.disciplinas?.length`)
+  - `mostrarPriorizacao` (default: `true` se `cargo.priorizacao?.disciplinas?.length`, `false` caso contrário; disabled com tooltip "Análise ainda não foi feita" quando não há priorização)
   - `mostrarLegislacao` (default `true`)
   - `mostrarAnotacoes` (default `false`)
   - `mostrarCheckbox` (default `true`)
-- Botão `Baixar PDF` no canto direito dos toggles. POST para `/api/editais/:e/cargos/:c/conteudo/pdf` com flags atuais. Resposta = Blob, download via anchor temporária.
+- Botão `Baixar PDF` no canto direito dos toggles. Chamada via `cargoService.gerarConteudoPdf(editalId, cargoId, opts)` (método novo no service). Resposta = Blob, download via anchor temporária.
 - Renderização: capa → (sumário se ≥5 disciplinas) → conteúdo. Detalhe na §6.
+
+**Empty state:** se `!cargo.conteudo_parseado?.disciplinas?.length` (cargo sem conteúdo estruturado ainda), exibe card central:
+> "Este cargo ainda não tem conteúdo programático estruturado."
+> [Botão "Voltar e estruturar"] → `router.push('/editais/:e/cargos/:c/conteudo')`.
+
+**Loading state:** durante fetch inicial, mostra skeleton do mesmo formato (capa com placeholders). Durante geração do PDF, botão "Baixar PDF" mostra spinner + texto "Gerando PDF...". Bloqueia outros toggles enquanto baixa (estado consistente entre clique e arquivo).
 
 ### 4.3 `cargo.routes.js` / `cargo.controller.js` / `conteudo-pdf.service.js` (plan-leges)
 
-- Nova rota: `POST /cargos/:cargoId/conteudo/pdf` autenticada (já há merge com `/editais/:editalId/cargos`, então a rota final fica `/api/editais/:editalId/cargos/:cargoId/conteudo/pdf`).
-- Controller: valida body com defaults, chama `conteudoPdfService.gerar(cargoId, opts)`, retorna PDF com headers corretos.
-- Service: 1) busca cargo via `findCargoById`, 2) `buildConteudoVerticalHtml(cargo, opts)`, 3) `htmlToPdf(html, pdfOpts)`, 4) retorna Buffer.
-- Arquivo novo: `src/modules/edital-cargos/conteudo-pdf.service.js`. Contém o builder HTML, o CSS embarcado (string template) e nada mais. Sem dependências externas além do Puppeteer já em uso.
+- Rota nova em `cargo.routes.js`: `router.post('/:cargoId/conteudo/pdf', authenticate, ctrl.conteudoPdf)`. Como `cargo.routes` está montado em `/api/editais/:editalId/cargos` (ver `app.js:67`), a URL final é `/api/editais/:editalId/cargos/:cargoId/conteudo/pdf`.
+- Controller `conteudoPdf`: valida body com defaults, chama `conteudoPdfService.gerar(cargoId, req.user.id, opts)`, retorna PDF com headers corretos.
+- Service: 1) `findCargoById(cargoId, userId)` (já valida ownership), 2) `findEditalById(cargo.editalId)` para metadados de header/capa, 3) `buildConteudoVerticalHtml({ cargo, edital }, opts)`, 4) `htmlToPdf(html, pdfOpts)`, 5) retorna Buffer.
+- Arquivo novo: `src/modules/edital-cargos/conteudo-pdf.service.js`. Contém o builder HTML, o CSS embarcado (string template) e os helpers de render. Sem dependências externas além do Puppeteer já em uso e do `findEditalById` (já existe em `editais/edital.service.js`).
 
 ## 5. Sistema visual
 
@@ -145,34 +158,55 @@ Acessibilidade: as bolinhas levam `aria-label="Prioridade 4 de 5"` no DOM da Pri
 
 ## 6. Estrutura do documento
 
+### 6.0 Princípios de composição — feito para compartilhar
+
+A capa e os primeiros assuntos de cada disciplina foram compostos para **funcionar bem como screenshot** em redes sociais (LinkedIn, Instagram, X). Em particular:
+
+- A capa cabe inteira em proporção 4:5 (formato dominante do feed do Instagram) e 9:16 (stories) sem cortar elementos-chave.
+- O nome do cargo + edital fica no terço superior — sobrevive ao corte de stories.
+- A linha de stats ("12 disciplinas · 145 assuntos · 38 leis vinculadas") fornece densidade informacional imediata que **funciona como hook** sem precisar abrir o documento.
+- O acento burgundy + papel creme é distintivo no feed (a maioria dos posts é branco/cinza/azul) — gera reconhecimento de marca.
+- Tipografia serif clássica sinaliza seriedade acadêmica — comunica antes da leitura.
+
+Sem geração automática de imagem (PNG) nesta fase — o usuário tira screenshot natural. Phase 2 considera gerar PNG do cover já com proporção otimizada.
+
 ### 6.1 Capa (página 1)
 
 ```
 ┌────────────────────────────────────────────────┐
-│  ──══════════════════════════════════════──    │ ← filete duplo no topo
+│  ══════════════════════════════════════════    │ ← filete duplo no topo
 │                                                │
 │                                                │
+│           ORGAO · BANCA · ANO                  │ ← IBM Plex Sans uppercase 11pt
+│           (ex: PGE-RJ · CESPE · 2026)          │   letter-spacing 0.18em
 │                                                │
-│           PGE-RJ · PROCURADOR · 2026           │ ← subtítulo IBM Plex sans uppercase
+│           Edital                               │ ← Cormorant italic 64pt
+│           Verticalizado                        │   à esquerda, weight 500
+│           ─────                                │ ← filete burgundy 40px
 │                                                │
-│           Edital                               │
-│           Verticalizado                        │ ← Cormorant italic 64pt, à esquerda
-│           ─────────                            │ ← filete burgundy curto
+│           CARGO.NOME                           │ ← Cormorant 28pt, weight 600
 │                                                │
 │                                                │
-│           Edição do candidato                  │ ← IBM Plex 9pt, gris
-│           Gerado em 12 de maio de 2026         │
+│           12 disciplinas                       │ ← Stats bloco
+│           145 assuntos · 38 sub-assuntos       │   Cormorant 14pt + numeral
+│           Carga estimada: 320h                 │   destacado em accent
+│                                                │
+│                                                │
+│           Edição do candidato                  │ ← IBM Plex Sans 9pt
+│           Gerado em 12 de maio de 2026         │   cor --ink-muted
 │                                                │
 │           [com priorização] [com legislação]   │ ← chips outline burgundy 9pt
-│           [com anotações]   [com checkboxes]   │
+│           [com anotações]   [com checkboxes]   │   (só aparecem se ligado)
 │                                                │
-│                                                │
-│  ──══════════════════════════════════════──    │ ← filete duplo embaixo
+│  ══════════════════════════════════════════    │ ← filete duplo embaixo
 └────────────────────────────────────────────────┘
 ```
 
-- Os chips só aparecem se o toggle correspondente estiver ligado.
-- Data formatada por extenso em pt-BR ("12 de maio de 2026").
+- **Stats line**: derivada do cargo. `disciplinas` = `cargo.priorizacao.disciplinas.length || cargo.conteudo_parseado.disciplinas.length`. `assuntos` e `sub-assuntos` = somatórios da árvore. `38 leis vinculadas` substitui linha de carga se priorização estiver ligada e houver leis (`leis_referencia` somatório). Se nenhum desses números estiver disponível, suprime a linha em silêncio.
+- **Carga estimada**: soma de `assunto.carga_estimada_horas` (já existe em priorização). Omite se zero ou ausente.
+- Chips de configuração só aparecem se o toggle correspondente estiver ligado.
+- Data: `new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long' }).format(new Date())` → "12 de maio de 2026".
+- Subtítulo do topo: monta `[orgao, banca, ano].filter(Boolean).join(' · ').toUpperCase()`. Se nenhum dos três existir, usa só `edital.nome.toUpperCase()`.
 
 ### 6.2 Sumário (página 2; somente se `disciplinas.length >= 5`)
 
@@ -239,14 +273,25 @@ Implementação em Puppeteer: usar `displayHeaderFooter: true` + `headerTemplate
 
 | Toggle | Default | Desabilitado quando |
 |---|---|---|
-| Mostrar priorização | true | `!cargo.priorizacao?.disciplinas?.length` (com tooltip "Análise ainda não foi feita") |
-| Mostrar legislação | true | — (sempre habilitado; se não houver leis, o bloco simplesmente não aparece) |
+| Mostrar priorização | true se houver priorização; senão false (e disabled) | `!cargo.priorizacao?.disciplinas?.length` — tooltip "Análise ainda não foi feita" |
+| Mostrar legislação | true | — (sempre habilitado; se não houver leis no cargo, o bloco simplesmente não aparece) |
 | Espaço para anotações | false | — |
 | Checkboxes | true | — |
 
 Bar dos toggles é sticky no topo da PrintView, com fundo `--paper` opaco e sombra suave. Oculto em `@media print`.
 
 Persistência de preferência: **não** nesta fase. A cada visita, defaults acima. Se o usuário pedir, persistimos via localStorage em fase futura.
+
+## 7.1 Responsividade da PrintView
+
+Embora o PDF seja A4 (largura fixa ~794px em 96dpi), a PrintView precisa funcionar em **mobile** porque é onde mora a chance de screenshot/compartilhamento.
+
+**Breakpoints:**
+- `≥ 1024px` (desktop): página A4 centralizada no viewport com sombra suave, "borda" de papel visível. Largura fixa 794px (mm reais). Toggle bar horizontal completo.
+- `768–1023px` (tablet): página A4 com scale-down via `transform: scale(0.85)` mantendo proporção; ou width 100% com font sizes reduzidos proporcionalmente.
+- `< 768px` (mobile): **largura 100%** do viewport com padding 16px. Tipografia reescalada: display 36pt, h1 22pt, h2 14pt — mantém hierarquia mas reduz absoluto. Toggle bar vira sheet/drawer expansível ao tocar no ícone de ajustes. Botão "Baixar PDF" continua acessível.
+
+Em todos os tamanhos, a estética e a paleta são as mesmas. O CSS de página A4 (`@page`, `page-break-*`) só ativa em `@media print` — não impacta visualização mobile.
 
 ## 8. Endpoint do backend
 
@@ -289,11 +334,15 @@ Todos opcionais; defaults aplicados na controller:
 
 ### 8.5 Template HTML
 
-Arquivo único `conteudo-pdf.service.js`, função pura `buildConteudoVerticalHtml(cargo, opts)`. Estrutura:
+Arquivo único `conteudo-pdf.service.js`, função pura `buildConteudoVerticalHtml({ cargo, edital }, opts)`. Estrutura:
 
 ```js
-function buildConteudoVerticalHtml(cargo, opts) {
+function buildConteudoVerticalHtml({ cargo, edital }, opts) {
   const { mostrarPriorizacao, mostrarLegislacao, mostrarAnotacoes, mostrarCheckbox } = opts
+  const disciplinas = mostrarPriorizacao
+    ? (cargo.priorizacao?.disciplinas || [])
+    : (cargo.conteudo_parseado?.disciplinas || [])
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -302,13 +351,15 @@ function buildConteudoVerticalHtml(cargo, opts) {
   <style>${CSS_TEMPLATE}</style>
 </head>
 <body>
-  ${renderCapa(cargo, opts)}
-  ${disciplinas.length >= 5 ? renderSumario(cargo) : ''}
-  ${renderConteudo(cargo, opts)}
+  ${renderCapa({ cargo, edital, disciplinas }, opts)}
+  ${disciplinas.length >= 5 ? renderSumario(disciplinas) : ''}
+  ${renderConteudo(disciplinas, opts)}
 </body>
 </html>`
 }
 ```
+
+**Escolha de fonte de dados:** quando `mostrarPriorizacao = true`, renderiza `cargo.priorizacao.disciplinas` (já carrega scores, justificativa, leis vinculadas embutidas no formato priorizado). Quando `false`, usa `cargo.conteudo_parseado.disciplinas` (estrutura crua sem badges; o toggle de legislação ainda consulta `fontes_explicitas` que existe em ambos os formatos).
 
 `CSS_TEMPLATE` é uma constante no mesmo arquivo (~150 linhas), contendo `@page`, tipografia, paginação, etc.
 
@@ -352,17 +403,23 @@ Hoje `htmlToPdf(html)` é fixa. Refatorar para `htmlToPdf(html, opts = {})` onde
 
 A chamada de `focoPDF` continua usando defaults (compatibilidade preservada). O service novo passa header/footer customizados.
 
-## 11. Tratamento de erros
+## 11. Tratamento de erros e UX de espera
 
-Frontend:
-- Botão "Baixar PDF" desabilitado durante request, com spinner.
-- Erro de rede → toast "Não foi possível gerar o PDF. Tente novamente." (usa o sistema de toast já existente no app, se houver; se não, alert).
-- Timeout > 30s → cancela e mostra mesma mensagem.
+Frontend — fluxos de espera:
+- **Fetch inicial do cargo + edital** (`onMounted`): skeleton da capa visível enquanto carrega; toggles aparecem inertes até dados chegarem.
+- **Geração do PDF**: ao clicar "Baixar PDF", botão muda para texto "Gerando PDF..." + spinner inline. Toggles ficam disabled enquanto a request está in-flight (evita inconsistência entre o que o usuário vê e o arquivo que está chegando). Timeout client-side: 60s (Puppeteer + edital de 200 páginas pode levar 10–20s no pior caso).
+
+Frontend — erros:
+- Erro de rede no fetch inicial → toast "Não foi possível carregar o cargo." + botão "Tentar novamente".
+- Erro de rede na geração do PDF → toast "Não foi possível gerar o PDF. Tente novamente." Botão volta ao estado normal; toggles re-habilitam.
+- Cargo sem `conteudo_parseado.disciplinas` (chega da rede mas vazio) → empty state já descrito em §4.2 (não é erro).
 
 Backend:
-- Cargo sem disciplinas → 422 "Cargo sem conteúdo programático estruturado".
-- Puppeteer falha → log com `cargoId` + erro → 500 genérico.
-- Browser singleton já recriado pelo `pdfGenerator.js` quando crasha.
+- Cargo não encontrado → 404 (`findCargoById` já lança).
+- Sem permissão → 403 (`findCargoById` já lança).
+- Cargo sem `conteudo_parseado.disciplinas` → 422 "Cargo sem conteúdo programático estruturado" (o frontend já não deveria chegar aqui, mas guarda defensiva).
+- Puppeteer falha → log estruturado com `cargoId`, `userId`, `opts`, stack → 500 genérico "Erro ao gerar PDF".
+- Browser singleton já recriado pelo `pdfGenerator.js` quando desconecta.
 
 ## 12. Acessibilidade (PrintView no navegador)
 
@@ -385,8 +442,11 @@ Frontend: opcional — se houver wrapper de eventos no app, dispara `edital_pdf_
 | Google Fonts lento → PDF sem a fonte | `htmlToPdf` já espera `document.fonts.ready` com timeout 2s; em fallback usa serif/sans-serif do sistema. Aceitável. |
 | Cargo com 50+ disciplinas → PDF gigante | Sem limite explícito; A4 lida bem. Se virar problema, paginar download em ZIP. Fora de escopo agora. |
 | CSS de paginação divergir entre PrintView e backend | Ambos partilham as **mesmas regras conceituais** documentadas aqui na §9. Code review checa em ambos. |
-| Usuário tenta imprimir cargo sem priorização com toggle ON | Toggle desabilitado no front; se vier no body do POST mesmo assim, backend ignora silenciosamente e gera sem priorização. |
+| Usuário tenta imprimir cargo sem priorização com toggle ON | Toggle desabilitado no front; se vier no body do POST mesmo assim, backend ignora silenciosamente e gera sem priorização (cai no fallback `conteudo_parseado`). |
 | XSS via nome de disciplina/assunto malicioso | `escapeHtml` em todo string vinda de DB no template do backend. PrintView usa interpolação Vue (auto-escape). |
+| Schemas de `priorizacao.disciplinas` e `conteudo_parseado.disciplinas` divergem (tem campos diferentes) | Render functions trabalham com union — checam existência de `score`, `leis_referencia`, `justificativa`, etc, antes de renderizar. Não exigem todos. |
+| Geração de PDF concorrente (vários usuários) trava o Puppeteer singleton | `pdfGenerator.js` já reutiliza um browser, mas cria `page` nova por chamada. Concurrência moderada (10+ pedidos simultâneos) já era suportada pelo `/foco/pdf`. Se virar gargalo, fila no backend (Phase 2). |
+| Mobile preview da PrintView quebrar layout A4 | CSS `@media print` separa "tela" de "papel"; tela usa flex/responsive, papel usa `@page`. Testar em Chrome mobile e Safari iOS antes do release. |
 
 ## 15. Plano de rollout
 
@@ -394,9 +454,11 @@ Sem feature flag. Mudanças são aditivas (botão novo, rota nova, endpoint novo
 
 ## 16. Fora de escopo (futuro)
 
-- Persistência das preferências de toggle.
-- Salvar PDFs gerados no DB para reuso/cache.
+- Persistência das preferências de toggle (localStorage).
+- Salvar PDFs gerados no DB para reuso/cache (evita gerar duas vezes em janela curta).
 - Modo "papel-economia" (preto-e-branco, sem cor, fonte do sistema) para impressoras a laser modestas.
 - Compartilhamento direto via link do PDF (sem necessidade de download).
 - Marca d'água com nome do usuário ("Edição do candidato — Fulano Silva") com opção de remover.
 - Exportar em DOCX para edição offline.
+- **Imagem de capa para redes sociais** (PNG 1080×1350 ou 1080×1920) gerada server-side a partir do mesmo template da capa — facilita compartilhamento sem precisar de screenshot manual. Promissor para crescimento orgânico.
+- Botão "Compartilhar no LinkedIn / Instagram" direto na PrintView (Web Share API onde disponível).
