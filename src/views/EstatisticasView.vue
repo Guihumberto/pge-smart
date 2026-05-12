@@ -23,6 +23,9 @@
       <button class="tab" :class="{ 'tab--active': activeTab === 'analise' }" @click="activeTab = 'analise'">
         <BarChart3 :size="14" /> Análise
       </button>
+      <button class="tab" :class="{ 'tab--active': activeTab === 'foco' }" @click="activeTab = 'foco'">
+        <Focus :size="14" /> Foco
+      </button>
     </div>
 
     <!-- ═══ Tab: Importações ═══ -->
@@ -399,6 +402,137 @@
       </div>
     </template>
 
+    <!-- ═══ Tab: Foco ═══ -->
+    <template v-if="activeTab === 'foco'">
+      <div class="foco">
+        <FocoToolbar
+          v-model:banca="foco.banca"
+          v-model:area="foco.area"
+          v-model:disciplina="foco.disciplina"
+          :bancas-options="bancasUsadas"
+          :areas-options="focoAreasOptions"
+          :disciplinas-options="focoDisciplinasOptions"
+          :anos-disponiveis="focoAnosDisponiveis"
+        />
+
+        <!-- Loading inicial -->
+        <div v-if="store.loading && !store.estatisticas.length" class="empty-state">
+          <p class="empty-state__desc">Carregando estatísticas...</p>
+        </div>
+
+        <!-- Empty: sem banca -->
+        <div v-else-if="!foco.banca" class="empty-state">
+          <Focus :size="40" />
+          <h3 class="empty-state__title">Selecione uma banca</h3>
+          <p class="empty-state__desc">Escolha banca e disciplina para análise detalhada.</p>
+        </div>
+
+        <!-- Empty: sem disciplina -->
+        <div v-else-if="!foco.disciplina" class="empty-state">
+          <Focus :size="40" />
+          <h3 class="empty-state__title">Selecione uma disciplina</h3>
+          <p class="empty-state__desc">
+            {{ focoDisciplinasOptions.length }} disciplina{{ focoDisciplinasOptions.length !== 1 ? 's' : '' }}
+            disponível{{ focoDisciplinasOptions.length !== 1 ? 'eis' : '' }} para
+            {{ foco.banca }}{{ foco.area ? ' / ' + foco.area : '' }}.
+          </p>
+        </div>
+
+        <!-- Empty: banca/área sem dados -->
+        <div v-else-if="!focoPresencaData.length" class="empty-state">
+          <BarChart3 :size="40" />
+          <h3 class="empty-state__title">Nenhum dado importado</h3>
+          <p class="empty-state__desc">
+            Importe estatísticas de {{ foco.banca }} na aba Importações.
+          </p>
+        </div>
+
+        <template v-else>
+          <!-- Cabeçalho Foco com botões de ação -->
+          <div class="foco-print-bar">
+            <span class="foco-print-bar__label">
+              {{ foco.banca }}{{ foco.area ? ' · ' + foco.area : '' }} — {{ foco.disciplina }}
+            </span>
+            <div class="foco-print-bar__actions">
+              <button
+                class="foco-action-btn foco-action-btn--primary"
+                :disabled="!focoParetoData.length"
+                title="Criar tarefas a partir desta análise"
+                @click="abrirGeradorTasks"
+              >
+                <ListPlus :size="13" /> Criar tarefas
+              </button>
+              <button class="foco-print-btn" @click="printPage" :disabled="printLoading">
+                <svg v-if="!printLoading" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                <span v-if="printLoading" class="foco-print-spinner" aria-hidden="true"></span>
+                {{ printLoading ? 'Gerando PDF...' : 'Exportar PDF' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Seção 1: Presença anual -->
+          <div class="foco-section">
+            <h3 class="foco-section__title">Presença de "{{ foco.disciplina }}" na prova</h3>
+            <FocoPresenca :dados="focoPresencaData" />
+          </div>
+
+          <!-- Seção 2: Mapa de calor assunto × ano -->
+          <div v-if="focoMatriz.assuntos.length" class="foco-section">
+            <h3 class="foco-section__title">Mapa de calor — assunto × ano</h3>
+            <p class="foco-section__desc">
+              Intensidade da cor proporcional ao % de questões. Ponto "·" = disciplina coberta, assunto ausente. "—" = disciplina não testada naquele ano.
+            </p>
+            <FocoHeatmap :assuntos="focoMatriz.assuntos" :anos="focoMatriz.anos" />
+          </div>
+
+          <!-- Seção 3: Pareto + Concentração -->
+          <div v-if="focoParetoData.length" class="foco-section">
+            <h3 class="foco-section__title">Concentração — Curva de Pareto</h3>
+            <p class="foco-section__desc">
+              Barras em roxo escuro = assuntos que cobrem os primeiros 80% das questões. Linha laranja = acumulado.
+            </p>
+            <FocoPareto :items="focoParetoData" />
+          </div>
+
+          <!-- Seção 4: Normas detectadas -->
+          <div class="foco-section">
+            <h3 class="foco-section__title">Normas jurídicas mencionadas</h3>
+            <p class="foco-section__desc">
+              Detectadas por padrão nos nomes de assuntos e sub-assuntos importados.
+            </p>
+            <FocoNormas :normas="focoNormas" />
+          </div>
+
+          <!-- Seção 5: Insight via questões reais -->
+          <div class="foco-section">
+            <h3 class="foco-section__title">Questões reais da banca</h3>
+            <p class="foco-section__desc">
+              Dados do acervo <code>questoes_v2</code> — tipo de cobrança, presença de doutrina/jurisprudência e amostra por assunto.
+            </p>
+            <FocoInsightQuestoes
+              :banca="foco.banca"
+              :area="foco.area"
+              :disciplina="foco.disciplina"
+              :anos="focoAnosDisponiveis"
+            />
+          </div>
+
+          <!-- Seção 6: Jurisprudência dos Tribunais Superiores -->
+          <div class="foco-section" v-if="foco.banca && foco.disciplina">
+            <h3 class="foco-section__title">Jurisprudência dos Tribunais Superiores</h3>
+            <p class="foco-section__desc">
+              Julgados mais cobrados por esta banca na disciplina — STF, STJ, TST e Corte IDH. Inclui súmulas, temas de repercussão geral, ADIs e acórdãos citados nas questões.
+            </p>
+            <FocoJurisprudencia
+              :banca="foco.banca"
+              :area="foco.area"
+              :disciplina="foco.disciplina"
+            />
+          </div>
+        </template>
+      </div>
+    </template>
+
     <!-- Modal de detalhes -->
     <Teleport to="body">
       <div v-if="detalhesItem" class="modal-overlay" @click.self="detalhesItem = null">
@@ -633,6 +767,23 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- Gerador de tarefas (a partir da análise Foco).
+         Tipo default 'questoes': dados vêm de questões reais da banca,
+         tipo mais coerente que 'lei_seca'. Mentor pode mudar no step 3. -->
+    <TaskGeneratorModal
+      v-if="taskGenerator.aberto"
+      :candidates="taskGenerator.candidates"
+      :discipline-name="taskGenerator.disciplineName"
+      :contexto-plano="taskGenerator.contextoPlano"
+      origem="foco"
+      :origem-dados="taskGenerator.origemDados"
+      default-task-type="questoes"
+      :title="`Criar tarefas — ${taskGenerator.disciplineName}`"
+      :subtitle="`Baseado na análise da banca ${foco.banca}${foco.area ? ' / ' + foco.area : ''}`"
+      @close="taskGenerator.aberto = false"
+      @created="onTasksCriadas"
+    />
   </div>
 </template>
 
@@ -641,8 +792,10 @@ import { ref, computed, onMounted, onBeforeUnmount, reactive, watch, nextTick } 
 import { useRoute, useRouter } from 'vue-router'
 import {
   Plus, BarChart3, MoreVertical, Trash2, X, Eye, Zap, ChevronDown,
-  TrendingUp, TrendingDown
+  TrendingUp, TrendingDown, Focus, Sparkles, ListPlus,
 } from 'lucide-vue-next'
+import TaskGeneratorModal from '@/components/task-generator/TaskGeneratorModal.vue'
+import { focoToCandidates } from '@/utils/taskCandidateAdapters'
 import { Line, Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
@@ -654,7 +807,18 @@ import { parseEstatisticas, detectYear } from '@/utils/statsParser'
 import { buildTrendRanking } from '@/utils/trendAnalysis'
 import { computeMetrics, applyPreset, DEFAULT_PRESETS } from '@/utils/recurrenceAnalysis'
 import { buildCsv, buildCsvFilename, downloadCsv, sanitizeFormulaPrefix } from '@/utils/csvExport'
+import { getPresencaAnual, getAssuntosMatrix, calcPareto } from '@/utils/bancaDisciplinaProfile'
+import { detectNormas, extractTextsFromDisciplina } from '@/utils/normaDetector'
+import FocoToolbar from '@/components/foco/FocoToolbar.vue'
+import FocoPresenca from '@/components/foco/FocoPresenca.vue'
+import FocoHeatmap from '@/components/foco/FocoHeatmap.vue'
+import FocoPareto from '@/components/foco/FocoPareto.vue'
+import FocoNormas from '@/components/foco/FocoNormas.vue'
+import FocoInsightQuestoes from '@/components/foco/FocoInsightQuestoes.vue'
+import FocoJurisprudencia from '@/components/foco/FocoJurisprudencia.vue'
 import { toast } from 'vue-sonner'
+import { estatisticaService } from '@/services/estatistica.service.js'
+import { readFocoIa } from '@/utils/focoIaCache.js'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import AnaliseToolbar from '@/components/analise/AnaliseToolbar.vue'
@@ -668,6 +832,7 @@ const store = useEstatisticaStore()
 const dictsStore = useDictsStore()
 
 const activeTab = ref('importacoes')
+const printLoading = ref(false)
 const showModal = ref(false)
 const openMenu = ref(null)
 const saving = ref(false)
@@ -1709,23 +1874,110 @@ function onAnaliseExportCsv() {
   toast.success(`CSV gerado: ${filename}`)
 }
 
-// ─── Querystring sync (§15) ──────────────────────────────────────────────────
-// Estado da Análise é persistido na URL pra refresh, back/forward e share-link.
-// Outras abas não persistem nada — só Análise (spec §15.1: tab=analise distingue).
+// ═══ Aba Foco ════════════════════════════════════════════════════════════════
+
+const foco = reactive({ banca: '', area: '', disciplina: '' })
+
+const focoAreasOptions = computed(() => {
+  if (!foco.banca) return []
+  const out = new Set()
+  for (const e of store.estatisticas) {
+    if (e.banca !== foco.banca) continue
+    if (e.area) out.add(e.area)
+  }
+  return [...out].sort()
+})
+
+const focoDisciplinasOptions = computed(() => {
+  if (!foco.banca) return []
+  const out = new Set()
+  for (const e of store.estatisticas) {
+    if (e.banca !== foco.banca) continue
+    if (foco.area && (e.area || '') !== foco.area) continue
+    for (const disc of e.dados?.disciplinas || []) {
+      if (disc.nome) out.add(disc.nome)
+    }
+  }
+  return [...out].sort()
+})
+
+// Anos com dados importados para banca/área (independente de disciplina)
+const focoAnosDisponiveis = computed(() => {
+  if (!foco.banca) return []
+  const anos = new Set()
+  for (const e of store.estatisticas) {
+    if (e.banca !== foco.banca) continue
+    if (foco.area && (e.area || '') !== foco.area) continue
+    anos.add(e.ano)
+  }
+  return [...anos].sort((a, b) => a - b)
+})
+
+const focoPresencaData = computed(() => {
+  if (!foco.banca || !foco.disciplina) return []
+  return getPresencaAnual(store.estatisticas, {
+    banca: foco.banca,
+    area: foco.area || undefined,
+    disciplina: foco.disciplina,
+  })
+})
+
+const focoMatriz = computed(() => {
+  if (!foco.banca || !foco.disciplina) return { assuntos: [], anos: [] }
+  return getAssuntosMatrix(store.estatisticas, {
+    banca: foco.banca,
+    area: foco.area || undefined,
+    disciplina: foco.disciplina,
+  })
+})
+
+const focoParetoData = computed(() => {
+  if (!foco.banca || !foco.disciplina) return []
+  return calcPareto(store.estatisticas, {
+    banca: foco.banca,
+    area: foco.area || undefined,
+    disciplina: foco.disciplina,
+  })
+})
+
+const focoNormas = computed(() => {
+  if (!foco.banca || !foco.disciplina) return []
+  const texts = extractTextsFromDisciplina(store.estatisticas, {
+    banca: foco.banca,
+    area: foco.area || undefined,
+    disciplina: foco.disciplina,
+  })
+  return detectNormas(texts)
+})
+
+// Reseta disciplina apenas se ela não está mais disponível na nova banca/área
+// (evita apagar disciplina vinda de deeplink onde fb→fa→fd chegam em ticks separados)
+watch(
+  () => [foco.banca, foco.area],
+  () => {
+    if (foco.disciplina && !focoDisciplinasOptions.value.includes(foco.disciplina)) {
+      foco.disciplina = ''
+    }
+  },
+)
+
+// ─── Querystring sync ────────────────────────────────────────────────────────
+// Persiste tab ativa e filtros (Análise + Foco) na URL para refresh/deeplink.
 
 const route = useRoute()
 const router = useRouter()
 
+const VALID_TABS = ['importacoes', 'tendencias', 'analise', 'foco']
 const VALID_GRAN = ['disciplina', 'assunto', 'sub_assunto']
 const VALID_PRESET = ['conservador', 'moderado', 'permissivo']
 const VALID_SORT = ['nome', 'recorrencia', 'recencia', 'volumeMedio', 'volumeTotal', 'pctMedio', 'slope']
 const VALID_DIR = ['asc', 'desc']
+// Chaves próprias de cada aba — usadas para não vazar params entre abas
 const ANALISE_QUERY_KEYS = ['tab', 'banca', 'area', 'gran', 'disc', 'ass', 'preset', 'cross', 'sort', 'dir', 'page', 'perPage']
-// Reutiliza opções do componente — single source of truth (#ARCH-24)
+const FOCO_QUERY_KEYS    = ['tab', 'fb', 'fa', 'fd']
+const ALL_OWN_KEYS = ['tab', 'banca', 'area', 'gran', 'disc', 'ass', 'preset', 'cross', 'sort', 'dir', 'page', 'perPage', 'fb', 'fa', 'fd']
 const VALID_PER_PAGE = ANALISE_PER_PAGE_OPTIONS
 
-// Lê route.query e devolve o snapshot validado pra aplicar no state.
-// Valores inválidos caem pra default (§15.2).
 function parseAnaliseQuery() {
   const q = route.query
   const pageNum = Number(q.page)
@@ -1743,26 +1995,22 @@ function parseAnaliseQuery() {
     page: Number.isInteger(pageNum) && pageNum > 0 ? pageNum : 1,
     perPage: VALID_PER_PAGE.includes(perPageNum) ? perPageNum : ANALISE_DEFAULT_PER_PAGE,
   }
-  // Validações cruzadas (§15.2):
-  // - disc só vale com gran=assunto|sub_assunto
-  // - ass só vale com disc presente
-  if (out.gran === 'disciplina') {
-    out.discFilter = ''
-    out.assFilter = ''
-  }
+  if (out.gran === 'disciplina') { out.discFilter = ''; out.assFilter = '' }
   if (!out.discFilter) out.assFilter = ''
   return out
 }
 
-// Aplica snapshot da URL ao state. Idempotente (se valor já está, watcher de
-// state→URL não re-dispara replace porque buildAnaliseQuery vai gerar a mesma
-// string que está em route.query).
 function applyAnaliseQueryToState() {
-  const next = parseAnaliseQuery()
-  Object.assign(analise, next)
+  Object.assign(analise, parseAnaliseQuery())
 }
 
-// Constrói o objeto query a partir do state. Defaults são omitidos pra manter URL limpa.
+function applyFocoQueryToState() {
+  const q = route.query
+  if (typeof q.fb === 'string') foco.banca = q.fb
+  if (typeof q.fa === 'string') foco.area  = q.fa
+  if (typeof q.fd === 'string') foco.disciplina = q.fd
+}
+
 function buildAnaliseQuery() {
   const q = { tab: 'analise' }
   if (analise.banca) q.banca = analise.banca
@@ -1779,7 +2027,44 @@ function buildAnaliseQuery() {
   return q
 }
 
-// Comparação rasa de query objects (todos os values são strings ou undefined).
+async function printPage() {
+  printLoading.value = true
+  try {
+    const cached = readFocoIa({ banca: foco.banca, area: foco.area, disciplina: foco.disciplina })
+    const blob = await estatisticaService.focoPDF({
+      banca: foco.banca,
+      area: foco.area || undefined,
+      disciplina: foco.disciplina,
+      presenca: focoPresencaData.value,
+      pareto: focoParetoData.value,
+      heatmap: focoMatriz.value,
+      normas: focoNormas.value,
+      analise: cached?.analise ?? null,
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const safe = s => (s || '').replace(/[^a-zA-Z0-9À-ÿ.\-_]/g, '-')
+    a.download = `foco-${safe(foco.disciplina) || 'relatorio'}-${safe(foco.banca)}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    toast.error(err.message || 'Erro ao gerar PDF')
+  } finally {
+    printLoading.value = false
+  }
+}
+
+function buildFocoQuery() {
+  const q = { tab: 'foco' }
+  if (foco.banca) q.fb = foco.banca
+  if (foco.area)  q.fa = foco.area
+  if (foco.disciplina) q.fd = foco.disciplina
+  return q
+}
+
 function queryEqual(a, b) {
   const ak = Object.keys(a).sort()
   const bk = Object.keys(b).sort()
@@ -1791,19 +2076,23 @@ function queryEqual(a, b) {
   return true
 }
 
-// Watcher state → URL: dispara replace (ou push pra mudanças significativas).
-// Significativas (§15.3): banca ou area mudaram → cria entry de history.
+// state → URL
 watch(
-  [() => activeTab.value, analise],
+  [() => activeTab.value, analise, foco],
   ([tab]) => {
-    // Preserva params não-relacionados à Análise (defensivo; hoje a view não usa outros)
     const preserved = {}
     for (const k of Object.keys(route.query)) {
-      if (!ANALISE_QUERY_KEYS.includes(k)) preserved[k] = route.query[k]
+      if (!ALL_OWN_KEYS.includes(k)) preserved[k] = route.query[k]
     }
-    const target = tab === 'analise'
-      ? { ...preserved, ...buildAnaliseQuery() }
-      : preserved
+
+    let target
+    if (tab === 'analise') {
+      target = { ...preserved, ...buildAnaliseQuery() }
+    } else if (tab === 'foco') {
+      target = { ...preserved, ...buildFocoQuery() }
+    } else {
+      target = { ...preserved, tab }
+    }
 
     if (queryEqual(target, route.query)) return
 
@@ -1811,25 +2100,20 @@ watch(
       tab === 'analise' &&
       (target.banca !== route.query.banca || target.area !== route.query.area)
 
-    const navMethod = significant ? 'push' : 'replace'
-    router[navMethod]({ query: target }).catch(() => {
-      // NavigationDuplicated é silencioso — Vue Router 4 já trata, mas defensivo
-    })
+    router[significant ? 'push' : 'replace']({ query: target }).catch(() => {})
   },
   { deep: true },
 )
 
-// Watcher URL → state: cobre back/forward e deeplinks.
+// URL → state (back/forward e deeplinks)
 watch(
   () => route.query,
   (q) => {
-    if (q.tab === 'analise') {
-      activeTab.value = 'analise'
-      applyAnaliseQueryToState()
-    } else if (activeTab.value === 'analise') {
-      // Back-nav saiu da aba Análise — volta pra default
-      activeTab.value = 'importacoes'
-    }
+    const tab = VALID_TABS.includes(q.tab) ? q.tab : null
+    if (!tab) return
+    activeTab.value = tab
+    if (tab === 'analise') applyAnaliseQueryToState()
+    if (tab === 'foco') applyFocoQueryToState()
   },
 )
 
@@ -1838,13 +2122,13 @@ function handleGlobalClick() {
 }
 
 onMounted(async () => {
-  // Registra listener antes do await para evitar janela onde o menu não fecha com clique fora
   window.addEventListener('click', handleGlobalClick)
 
-  // Estado inicial da Análise via querystring (§15.3)
-  if (route.query.tab === 'analise') {
-    activeTab.value = 'analise'
-    applyAnaliseQueryToState()
+  const tab = VALID_TABS.includes(route.query.tab) ? route.query.tab : null
+  if (tab) {
+    activeTab.value = tab
+    if (tab === 'analise') applyAnaliseQueryToState()
+    if (tab === 'foco') applyFocoQueryToState()
   }
 
   const fetches = [store.fetchEstatisticas()]
@@ -1856,6 +2140,72 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('click', handleGlobalClick)
 })
+
+// ── Gerador de tarefas a partir da análise Foco (Onda 3) ────────
+const taskGenerator = ref({
+  aberto: false,
+  candidates: [],
+  disciplineName: '',
+  contextoPlano: {},
+  origemDados: {},
+})
+
+function abrirGeradorTasks() {
+  if (!focoParetoData.value.length) {
+    toast.error('Sem dados suficientes pra gerar tarefas.')
+    return
+  }
+  const contexto = {
+    banca: foco.banca,
+    area: foco.area,
+    disciplina: foco.disciplina,
+  }
+  const { candidates, normasDaDisciplina } = focoToCandidates(
+    focoParetoData.value, focoNormas.value, contexto,
+  )
+  if (!candidates.length) {
+    toast.error('Nenhum assunto disponível na análise.')
+    return
+  }
+  taskGenerator.value = {
+    aberto: true,
+    candidates,
+    disciplineName: foco.disciplina,
+    contextoPlano: {
+      banca: foco.banca,
+      area: foco.area || null,
+    },
+    origemDados: {
+      bancaOrigem: foco.banca,
+      areaOrigem: foco.area || null,
+      disciplinaOrigem: foco.disciplina,
+      // Normas detectadas na disciplina (nível meta, não por assunto). Mentor
+      // pode usar pra inspirar tipo lei_seca ao revisar as tasks.
+      normasDaDisciplina: normasDaDisciplina.length ? normasDaDisciplina : null,
+    },
+  }
+}
+
+function onTasksCriadas({ planId, tasks, partial }) {
+  taskGenerator.value.aberto = false
+  if (partial) {
+    // Plano criado mas bulk falhou — toast com ação (não redireciona
+    // automático; mentor pode estar no meio de uma análise).
+    toast.warning('Plano criado mas algumas tarefas falharam.', {
+      action: {
+        label: 'Abrir workspace',
+        onClick: () => router.push(`/workspace?plan=${planId}`),
+      },
+    })
+    return
+  }
+  toast.success(`${tasks.length} tarefa(s) criada(s) no plano.`, {
+    action: {
+      label: 'Abrir workspace',
+      onClick: () => router.push(`/workspace?plan=${planId}`),
+    },
+  })
+}
 </script>
 
 <style scoped>
@@ -2164,4 +2514,91 @@ onBeforeUnmount(() => {
 }
 .empty-state__title { font-size: 16px; font-weight: 700; color: #1a1a2e; margin: 0; }
 .empty-state__desc { font-size: 13px; color: #aaa; max-width: 360px; margin: 0; line-height: 1.6; }
+
+/* Aba Foco */
+.foco { display: flex; flex-direction: column; gap: 20px; }
+
+.foco-section {
+  background: #fff; border: 1px solid #ebe9e4; border-radius: 12px; padding: 20px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.foco-section__title { font-size: 14px; font-weight: 700; color: #1a1a2e; margin: 0; }
+.foco-section__desc  { font-size: 12px; color: #888; margin: 0; line-height: 1.5; }
+
+.foco-print-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 2px; gap: 12px; flex-wrap: wrap;
+}
+.foco-print-bar__label {
+  font-size: 13px; font-weight: 600; color: #374151;
+}
+.foco-print-bar__actions { display: flex; gap: 8px; }
+.foco-action-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px;
+  background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
+  font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; color: #6b7280;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.foco-action-btn:hover:not(:disabled) { border-color: #534AB7; color: #534AB7; }
+.foco-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.foco-action-btn--primary {
+  background: #EEEDFE; border-color: transparent; color: #534AB7;
+}
+.foco-action-btn--primary:hover:not(:disabled) { background: #DDDCFC; border-color: #534AB7; color: #534AB7; }
+.foco-print-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px;
+  background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
+  font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; color: #6b7280;
+  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.foco-print-btn:hover:not(:disabled) { border-color: #534AB7; color: #534AB7; }
+.foco-print-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.foco-print-spinner {
+  display: inline-block;
+  width: 11px; height: 11px;
+  border: 2px solid #d1d5db;
+  border-top-color: #534AB7;
+  border-radius: 50%;
+  animation: spin-pdf 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin-pdf { to { transform: rotate(360deg); } }
+
+/* ─── Print ─────────────────────────────────────────────────────────────────── */
+@media print {
+  /* Oculta tudo exceto o conteúdo da aba Foco */
+  .stats-view__header,
+  .tabs,
+  .foco-print-bar,
+  .foco-toolbar {
+    display: none !important;
+  }
+
+  .stats-view {
+    padding: 0 !important;
+    font-size: 11pt;
+  }
+
+  .foco {
+    gap: 14px !important;
+  }
+
+  .foco-section {
+    break-inside: avoid;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    padding: 14px !important;
+  }
+
+  .foco-section__title {
+    font-size: 12pt !important;
+  }
+
+  /* Garante que os gráficos canvas não sejam cortados */
+  canvas {
+    max-width: 100% !important;
+  }
+}
 </style>

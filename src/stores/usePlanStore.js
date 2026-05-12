@@ -25,10 +25,14 @@ export const usePlanStore = defineStore('plans', () => {
     }
   }
 
-  async function createPlan(title, description = '') {
-    const plan = await planService.create({ title, description })
+  async function createPlan(title, description = '', extra = {}, opts = {}) {
+    // `extra` aceita campos opcionais: banca, area, cargoId, editalId
+    // (preenchidos quando o plano nasce de um cargo ou da aba Foco).
+    // `opts.silent` suprime o toast — útil quando o caller (ex: TaskGeneratorModal)
+    // vai mostrar um toast final combinado depois.
+    const plan = await planService.create({ title, description, ...extra })
     plans.value.push(plan)
-    toast.success('Plano criado!')
+    if (!opts.silent) toast.success('Plano criado!')
     return plan
   }
 

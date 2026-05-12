@@ -59,7 +59,8 @@ src/
 │   ├── invite.service.js       # /api/invites + getLinkUrl()
 │   ├── edital.service.js  # /api/editais
 │   ├── cargo.service.js   # /api/editais/:id/cargos
-│   └── … (orientation, discipline, law, question, dicts, estatistica, taskOrientation, storage)
+│   ├── estatistica.service.js  # /api/estatisticas (CRUD + foco: insight, IA, jurisprudência, PDF)
+│   └── … (orientation, discipline, law, question, dicts, taskOrientation, storage)
 ├── stores/                # Pinia — ver mapa abaixo
 ├── views/                 # 20+ páginas (ver mapa abaixo)
 ├── components/
@@ -68,7 +69,7 @@ src/
 │   ├── features/          # Componentes por feature
 │   ├── common/ ui/        # Atoms reutilizáveis
 ├── composables/           # useConnectionStatus.js (online/offline). useApi/useAuth estão vazios — não copiar como referência.
-├── utils/                 # releaseEngine.js, editalParser.js, articleParser.js, statsParser.js, questionDicts.js
+├── utils/                 # releaseEngine.js, editalParser.js, articleParser.js, statsParser.js, questionDicts.js, normaDetector.js, bancaDisciplinaProfile.js, focoIaCache.js
 ├── plugins/i18n.js axios.js
 └── layouts/
 ```

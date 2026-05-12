@@ -8,21 +8,27 @@
         </span>
       </span>
       <div class="panel__head-actions">
-        <template v-if="selectedIds.size > 0">
+        <template v-if="selectedVisibleIds.length > 0">
           <button class="panel__batch-btn panel__batch-btn--duplicate" @click="batchDuplicate">
-            <Copy :size="12" /> Duplicar ({{ selectedIds.size }})
+            <Copy :size="12" /> Duplicar ({{ selectedVisibleIds.length }})
           </button>
           <button class="panel__batch-btn panel__batch-btn--danger" @click="batchDelete">
-            <Trash2 :size="12" /> Excluir ({{ selectedIds.size }})
+            <Trash2 :size="12" /> Excluir ({{ selectedVisibleIds.length }})
           </button>
         </template>
         <label v-if="tasks.length" class="panel__select-all" title="Selecionar todas">
-          <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
+          <input
+            type="checkbox"
+            :checked="allSelected"
+            aria-label="Selecionar todas as tarefas visíveis"
+            @change="toggleSelectAll"
+          />
         </label>
         <button
           v-if="disciplineId"
           class="panel__icon-btn"
           title="Nova tarefa"
+          aria-label="Nova tarefa"
           @click="openModal(null)"
         >
           <Plus :size="14" />
@@ -30,21 +36,32 @@
       </div>
     </div>
 
+    <TaskFilterBar
+      v-if="disciplineId"
+      v-model="filtros"
+      :contextos-origem="contextosOrigem"
+      :tem-plano-ativo="!!planId"
+    />
+
     <div class="panel__body">
       <p v-if="!disciplineId" class="panel__empty">
         Selecione uma disciplina para ver as tarefas.
       </p>
 
       <template v-else>
-        <p v-if="!tasks.length" class="panel__empty">
+        <p v-if="!tasksAll.length" class="panel__empty">
           Nenhuma tarefa nesta disciplina.
+        </p>
+        <p v-else-if="!tasks.length" class="panel__empty">
+          Nenhuma tarefa bate com os filtros.
         </p>
 
         <div
           v-for="task in tasks"
           :key="task.id"
-          class="task-card"
+          :class="['task-card', { 'task-card--in-use': taskIdsEmUsoNoPlano.has(task.id) }]"
           draggable="true"
+          :title="taskIdsEmUsoNoPlano.has(task.id) ? 'Já em uso em alguma meta deste plano' : ''"
           @dragstart="onDragStart(task, $event)"
           @dragend="$emit('drag-start', null)"
         >
@@ -55,12 +72,44 @@
             <span class="task-badge" :class="`task-badge--${task.type}`">
               {{ typeLabel(task.type) }}
             </span>
+            <TaskNumeroBadge
+              v-if="task.numero != null"
+              :numero="task.numero"
+              :discipline-name="discipline?.name"
+            />
+            <TaskOriginBadge
+              v-if="task.origem"
+              :origem="task.origem"
+              :origem-dados="task.origemDados"
+            />
+            <TaskRevisaoBadge
+              v-if="task.revisaoDeTaskId"
+              :revisao-de-task-id="task.revisaoDeTaskId"
+            />
             <div class="task-card__actions">
-              <button class="icon-action" @click="openModal(task)"><Pencil :size="12" /></button>
-              <button class="icon-action icon-action--danger" @click="remove(task.id)"><Trash2 :size="12" /></button>
+              <button
+                class="icon-action"
+                title="Criar revisão desta tarefa"
+                aria-label="Criar revisão desta tarefa"
+                @click="criarRevisao(task)"
+              >
+                <RotateCcw :size="12" />
+              </button>
+              <button
+                class="icon-action"
+                title="Editar"
+                aria-label="Editar tarefa"
+                @click="openModal(task)"
+              ><Pencil :size="12" /></button>
+              <button
+                class="icon-action icon-action--danger"
+                title="Excluir"
+                aria-label="Excluir tarefa"
+                @click="remove(task.id)"
+              ><Trash2 :size="12" /></button>
             </div>
           </div>
-          
+
           <p class="task-card__title">{{ task.title }}</p>
           <p v-if="task.description" class="task-card__desc">{{ task.description }}</p>
 
@@ -100,12 +149,19 @@
 <script setup>
 import { ref, computed, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Pencil, Trash2, GripVertical, BookOpen, Sparkles, Copy } from 'lucide-vue-next'
+import { Plus, Pencil, Trash2, GripVertical, BookOpen, Sparkles, Copy, RotateCcw } from 'lucide-vue-next'
+import { normalizeText } from '@/utils/strings'
 import { useDisciplineStore } from '@/stores/useDisciplineStore'
 import { useTaskStore } from '@/stores/useTaskStore'
 import { formatArticles } from '@/utils/articleParser'
 import { toast } from 'vue-sonner'
 import ModalTask from '@/components/workspace/ModalTask.vue'
+import TaskOriginBadge from '@/components/task-generator/TaskOriginBadge.vue'
+import TaskNumeroBadge from '@/components/task-generator/TaskNumeroBadge.vue'
+import TaskRevisaoBadge from '@/components/task-generator/TaskRevisaoBadge.vue'
+import TaskFilterBar from '@/components/task-generator/TaskFilterBar.vue'
+import { usePlanStore } from '@/stores/usePlanStore'
+import { useCargoStore } from '@/stores/useCargoStore'
 
 const props = defineProps({
   disciplineId: String,
@@ -140,12 +196,21 @@ function toggleSelectAll() {
   }
 }
 
+// Restringe operações batch ao subconjunto de selecionados que ESTÁ visível
+// (intersecção com tasks.value), evitando ações silenciosas sobre tasks
+// escondidas pelo filtro.
+const selectedVisibleIds = computed(() => {
+  const visiveis = new Set(tasks.value.map(t => t.id))
+  return [...selectedIds.value].filter(id => visiveis.has(id))
+})
+
 async function batchDelete() {
-  const count = selectedIds.value.size
-  if (!confirm(`Excluir ${count} tarefa(s) selecionada(s)?`)) return
+  const ids = selectedVisibleIds.value
+  if (!ids.length) return
+  if (!confirm(`Excluir ${ids.length} tarefa(s) selecionada(s)?`)) return
   try {
-    await Promise.all([...selectedIds.value].map(id => taskStore.remove(props.planId, id)))
-    toast.success(`${count} tarefa(s) removida(s).`)
+    await Promise.all(ids.map(id => taskStore.remove(id)))
+    toast.success(`${ids.length} tarefa(s) removida(s).`)
     selectedIds.value = new Set()
   } catch (err) {
     toast.error(err.message)
@@ -153,7 +218,7 @@ async function batchDelete() {
 }
 
 async function batchDuplicate() {
-  const ids = [...selectedIds.value]
+  const ids = selectedVisibleIds.value
   const toDuplicate = tasks.value.filter(t => ids.includes(t.id))
   try {
     for (const task of toDuplicate) {
@@ -174,11 +239,146 @@ const discipline = computed(() =>
   discStore.disciplines.find(d => d.id === props.disciplineId)
 )
 
-const tasks = computed(() =>
+const planStore = usePlanStore()
+const cargoStore = useCargoStore()
+const filtros = ref({
+  q: '',
+  escopo: 'plano',   // 'plano' (default: tasks deste plano + livres sem plano) | 'todos'
+  status: 'todas',
+  types: [],
+  origens: [],
+  contextos: [],
+})
+
+// Tasks crus da disciplina (sem filtro) — usado pra distinguir "nenhuma task"
+// de "nenhuma task bate com filtros" no empty state.
+const tasksAll = computed(() =>
   props.disciplineId
     ? taskStore.tasks.filter(t => t.disciplineId === props.disciplineId)
     : []
 )
+
+// Constrói chave de contexto pra uma task (cargo/banca/área de origem).
+// Tasks sem origemDados ou origem manual sem contexto retornam null.
+function ctxKeyOf(task) {
+  const d = task.origemDados || {}
+  if (d.cargoOrigem) return `cargo:${d.cargoOrigem}`
+  if (d.bancaOrigem && d.areaOrigem) return `banca:${d.bancaOrigem}|${d.areaOrigem}`
+  if (d.bancaOrigem) return `banca:${d.bancaOrigem}`
+  return null
+}
+function ctxLabelOf(task) {
+  const d = task.origemDados || {}
+  if (d.cargoOrigem) {
+    // Lookup no cache acumulativo `cargosById` (persistido em localStorage).
+    // Se mentor já abriu o edital do cargo alguma vez, o nome real aparece;
+    // caso contrário, fallback truncado e disparamos ensureCargo em background
+    // pra próximas renders mostrarem o nome.
+    const cargo = cargoStore.getCargoById(d.cargoOrigem)
+    if (cargo?.nome) return cargo.nome
+    return `cargo ${String(d.cargoOrigem).slice(0, 6)}…`
+  }
+  if (d.bancaOrigem && d.areaOrigem) return `${d.bancaOrigem} / ${d.areaOrigem}`
+  if (d.bancaOrigem) return d.bancaOrigem
+  return null
+}
+
+// Hidrata `cargosById` em background pros cargos de origem que ainda não
+// estão no cache — assim ctxLabelOf passa de truncado pra nome real na
+// próxima render (sem block).
+function ensureCargosDasTasks() {
+  const vistos = new Set()
+  for (const t of tasksAll.value) {
+    const cargoId = t.origemDados?.cargoOrigem
+    const editalId = t.origemDados?.editalOrigem
+    if (!cargoId || !editalId || vistos.has(cargoId)) continue
+    if (cargoStore.getCargoById(cargoId)) continue
+    vistos.add(cargoId)
+    cargoStore.ensureCargo(editalId, cargoId)
+  }
+}
+watch(tasksAll, ensureCargosDasTasks, { immediate: true })
+function ctxTooltipOf(task) {
+  const d = task.origemDados || {}
+  const partes = []
+  if (d.cargoOrigem) partes.push(`Cargo ${d.cargoOrigem}`)
+  if (d.editalOrigem) partes.push(`Edital ${d.editalOrigem}`)
+  if (d.bancaOrigem) partes.push(`Banca ${d.bancaOrigem}`)
+  if (d.areaOrigem) partes.push(`Área ${d.areaOrigem}`)
+  return partes.join(' · ')
+}
+
+// Tasks após escopo de plano aplicado (sem outros filtros).
+// Usado como base de `contextosOrigem` pra evitar chips fantasmas (de tasks
+// de outros planos quando escopo='plano').
+const tasksNoEscopo = computed(() => {
+  if (filtros.value.escopo === 'todos' || !props.planId) return tasksAll.value
+  return tasksAll.value.filter(t => !t.planId || t.planId === props.planId)
+})
+
+// Conjunto único de contextos encontrados nas tasks (já filtradas por escopo),
+// usado pra popular os chips dinâmicos do filtro "Veio de:".
+const contextosOrigem = computed(() => {
+  const seen = new Map() // key → { key, label, tooltip }
+  for (const t of tasksNoEscopo.value) {
+    const key = ctxKeyOf(t)
+    if (!key || seen.has(key)) continue
+    seen.set(key, {
+      key,
+      label: ctxLabelOf(t) || key,
+      tooltip: ctxTooltipOf(t),
+    })
+  }
+  return [...seen.values()]
+})
+
+// Quando contextos disponíveis mudam (ex.: troca de escopo, refetch), poda
+// `filtros.contextos` de chaves que não existem mais — evita filtro fantasma.
+watch(contextosOrigem, (lista) => {
+  const validas = new Set(lista.map(c => c.key))
+  const filtrados = filtros.value.contextos.filter(k => validas.has(k))
+  if (filtrados.length !== filtros.value.contextos.length) {
+    filtros.value = { ...filtros.value, contextos: filtrados }
+  }
+})
+
+// Set de taskIds que estão em alguma goal do plano ativo (pra filtro de status).
+const taskIdsEmUsoNoPlano = computed(() => {
+  if (!props.planId) return new Set()
+  const set = new Set()
+  for (const g of planStore.goals) {
+    if (g?.planId === props.planId) {
+      for (const tid of g.taskIds || []) set.add(tid)
+    }
+  }
+  return set
+})
+
+const tasks = computed(() => {
+  if (!props.disciplineId) return []
+  const q = normalizeText(filtros.value.q)
+  const { escopo, status, types, origens, contextos } = filtros.value
+  return tasksAll.value.filter(t => {
+    // Escopo: 'plano' (default) mostra só tasks deste plano + livres sem plano;
+    //         'todos' mostra tasks da disciplina de qualquer plano (biblioteca)
+    if (escopo === 'plano' && props.planId) {
+      if (t.planId && t.planId !== props.planId) return false
+    }
+    if (q && !normalizeText(t.title).includes(q)) return false
+    if (types.length && !types.includes(t.type)) return false
+    if (origens.length && !origens.includes(t.origem || 'ia_legacy')) return false
+    if (contextos.length) {
+      const key = ctxKeyOf(t)
+      if (!key || !contextos.includes(key)) return false
+    }
+    if (status !== 'todas' && props.planId) {
+      const inUse = taskIdsEmUsoNoPlano.value.has(t.id)
+      if (status === 'livres' && inUse) return false
+      if (status === 'em_uso' && !inUse) return false
+    }
+    return true
+  })
+})
 
 const typeLabels = {
   leitura_pdf: 'PDF',
@@ -199,10 +399,24 @@ function openModal(task) {
 async function remove(id) {
   if (!confirm('Tem certeza que deseja remover esta tarefa?')) return
   try {
-    await taskStore.remove(props.planId, id)
+    await taskStore.remove(id)
     toast.success('Tarefa removida.')
   } catch (err) {
     toast.error(err.message)
+  }
+}
+
+async function criarRevisao(task) {
+  if (!props.planId) {
+    toast.error('Selecione um plano antes de criar revisão.')
+    return
+  }
+  if (!confirm(`Criar nova tarefa de revisão a partir de "${task.title}"?`)) return
+  try {
+    const revisao = await taskStore.criarRevisao(task.id, { planId: props.planId })
+    toast.success(`Revisão "${revisao.title}" criada.`)
+  } catch (err) {
+    toast.error(err.response?.data?.message || err.message || 'Erro ao criar revisão.')
   }
 }
 
@@ -216,8 +430,9 @@ function onDragStart(task, event) {
 }
 
 watch(() => props.disciplineId, (newValue) => {
-  taskStore.fetchByDiscipline(newValue)
   selectedIds.value = new Set()
+  if (!newValue) return // sem disciplina selecionada, não busca (evita URL com 'undefined')
+  taskStore.fetchByDiscipline(newValue)
 })
 </script>
 
@@ -316,11 +531,16 @@ watch(() => props.disciplineId, (newValue) => {
   transform: translateY(-1px);
 }
 .task-card:active { cursor: grabbing; }
+/* Task em uso em alguma meta do plano ativo — atenua sem esconder */
+.task-card--in-use { opacity: 0.55; background: #f3f2ed; }
+.task-card--in-use:hover { opacity: 0.85; }
 
 .task-card__top {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-bottom: 6px;
 }
 

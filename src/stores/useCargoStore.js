@@ -9,10 +9,72 @@ export const useCargoStore = defineStore('cargos', () => {
   const loading = ref(false)
   const parseStatus = ref(null)
 
+  // Cache acumulativo SLIM de cargos por id — usado pra resolver `cargo.nome`
+  // de tasks com `origemDados.cargoOrigem` (PanelTasks ctxLabelOf).
+  // Guarda apenas `{ id, nome, editalId }` (não o doc inteiro com priorização)
+  // pra evitar inflar localStorage com mentor de longo prazo.
+  // Cap LRU informal: se passar de CARGOS_CAP_LRU, descarta os mais antigos.
+  const cargosById = ref({})
+  const CARGOS_CAP_LRU = 200
+
+  // Map de cargoId → Promise pendente — dedup de chamadas paralelas a
+  // `ensureCargo`. Compartilhando a Promise, callers paralelos recebem o
+  // mesmo resultado (não null como na 1ª versão).
+  const inFlightCargos = new Map()
+
+  function _toSlim(c) {
+    if (!c?.id) return null
+    return { id: c.id, nome: c.nome ?? null, editalId: c.editalId ?? null }
+  }
+
+  function _enforceCap() {
+    const keys = Object.keys(cargosById.value)
+    if (keys.length <= CARGOS_CAP_LRU) return
+    // Cap simples: remove os primeiros (mais antigos por ordem de inserção).
+    const remover = keys.slice(0, keys.length - CARGOS_CAP_LRU)
+    for (const k of remover) delete cargosById.value[k]
+  }
+
+  function indexarCargos(list) {
+    for (const c of list || []) {
+      const slim = _toSlim(c)
+      if (slim) cargosById.value[slim.id] = slim
+    }
+    _enforceCap()
+  }
+
+  function getCargoById(id) {
+    return cargosById.value[id] || cargos.value.find(c => c.id === id) || null
+  }
+
+  /**
+   * Busca cargo por id se ainda não está em cache. Idempotente; deduplica
+   * chamadas paralelas — todas recebem a mesma Promise (e o mesmo resultado).
+   */
+  function ensureCargo(editalId, cargoId) {
+    if (!cargoId || !editalId) return Promise.resolve(null)
+    if (cargosById.value[cargoId]) return Promise.resolve(cargosById.value[cargoId])
+    if (inFlightCargos.has(cargoId)) return inFlightCargos.get(cargoId)
+    const p = cargoService.get(editalId, cargoId)
+      .then(cargo => {
+        const slim = _toSlim(cargo)
+        if (slim) {
+          cargosById.value[slim.id] = slim
+          _enforceCap()
+        }
+        return cargo
+      })
+      .catch(() => null)
+      .finally(() => inFlightCargos.delete(cargoId))
+    inFlightCargos.set(cargoId, p)
+    return p
+  }
+
   async function fetchCargos(editalId) {
     loading.value = true
     try {
       cargos.value = await cargoService.list(editalId)
+      indexarCargos(cargos.value)
     } finally {
       loading.value = false
     }
@@ -22,6 +84,7 @@ export const useCargoStore = defineStore('cargos', () => {
     loading.value = true
     try {
       cargoAtual.value = await cargoService.get(editalId, cargoId)
+      if (cargoAtual.value) indexarCargos([cargoAtual.value])
       return cargoAtual.value
     } finally {
       loading.value = false
@@ -164,7 +227,26 @@ export const useCargoStore = defineStore('cargos', () => {
     fetchCargos, fetchCargo, createCargo, updateCargo, removeCargo,
     enviarParse, salvarConteudo, analisarConteudo,
     getLeisSugestoes, regerarLeisSugestoes, vincularLei, mudarStatusLei, desvincularLei,
+
+    // Cache de cargos por id (slim — id/nome/editalId). Use APENAS via
+    // `getCargoById(id)` ou `ensureCargo(editalId, id)`. Não mutar direto.
+    cargosById,
+    getCargoById, ensureCargo,
   }
 }, {
-  persist: { key: 'cargos', paths: ['cargos'] }
+  persist: {
+    key: 'cargos',
+    paths: ['cargos', 'cargosById'],
+    // Poda o cap LRU após hidratação — sessões antigas (pré-cap) podem ter
+    // localStorage com centenas de entradas. Sem isso, o heap infla até a
+    // próxima inserção disparar `_enforceCap`.
+    afterRestore: (ctx) => {
+      const c = ctx.store.cargosById
+      const keys = Object.keys(c || {})
+      if (keys.length > 200) {
+        const remover = keys.slice(0, keys.length - 200)
+        for (const k of remover) delete c[k]
+      }
+    },
+  },
 })

@@ -52,6 +52,7 @@ import { ref, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { Plus } from 'lucide-vue-next'
 import { usePlanStore } from '@/stores/usePlanStore'
+import { useTaskStore } from '@/stores/useTaskStore'
 
 import { useDisciplineStore } from '@/stores/useDisciplineStore'
 import PanelDisciplines from '@/components/workspace/PanelDisciplines.vue'
@@ -63,6 +64,7 @@ import { toast } from 'vue-sonner'
 const route  = useRoute()
 
 const planStore       = usePlanStore()
+const taskStore       = useTaskStore()
 const disciplineStore = useDisciplineStore()
 
 const activePlanId           = ref(null)
@@ -91,7 +93,12 @@ onMounted(async () => {
     }
 
     if (activePlanId.value) {
-      await planStore.fetchGoals(activePlanId.value)
+      // Carrega goals e tasks do plano em paralelo. Sem fetchByPlan, os chips
+      // de meta renderizam "—" porque getTask(taskId) não acha no store.
+      await Promise.all([
+        planStore.fetchGoals(activePlanId.value),
+        taskStore.fetchByPlan(activePlanId.value),
+      ])
     }
   } catch (err) {
     toast.error('Erro ao carregar workspace.')
@@ -105,9 +112,23 @@ onMounted(async () => {
 watch(activePlanId, async (id) => {
   if (!id || !mounted.value) return
   try {
-    await planStore.fetchGoals(id)
+    await Promise.all([
+      planStore.fetchGoals(id),
+      taskStore.fetchByPlan(id),
+    ])
   } catch (err) {
     toast.error('Erro ao carregar dados do plano.')
+  }
+})
+
+// ── Reage a mudanças de ?plan=... mesmo após montado ──────
+// Necessário pra fluxo "Criar tarefas → toast action 'Abrir workspace'"
+// quando o workspace já estava aberto em outro plano.
+watch(() => route.query.plan, (novoPlan) => {
+  if (!mounted.value || !novoPlan) return
+  const target = String(novoPlan)
+  if (target !== activePlanId.value && planStore.plans.find(p => p.id === target)) {
+    activePlanId.value = target
   }
 })
 

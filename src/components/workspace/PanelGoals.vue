@@ -9,9 +9,14 @@
           </button>
         </template>
         <label v-if="goals.length" class="panel__select-all" title="Selecionar todas">
-          <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
+          <input
+            type="checkbox"
+            :checked="allSelected"
+            aria-label="Selecionar todas as metas"
+            @change="toggleSelectAll"
+          />
         </label>
-        <button class="panel__icon-btn" title="Nova meta" @click="openGoalForm">
+        <button class="panel__icon-btn" title="Nova meta" aria-label="Nova meta" @click="openGoalForm">
           <Plus :size="14" />
         </button>
       </div>
@@ -29,8 +34,8 @@
           v-for="goal in goals"
           :key="goal.id"
           class="goal-card"
-          :class="{ 'goal-card--dragover': dragOverId === goal.id }"
-          @dragover.prevent="dragOverId = goal.id"
+          :class="{ 'goal-card--dragover': dragOverId === goal.id && !dragChip }"
+          @dragover.prevent="onCardDragOver(goal.id, $event)"
           @dragleave="dragOverId = null"
           @drop="onDrop(goal.id, $event)"
         >
@@ -43,13 +48,28 @@
               <span class="goal-card__title">{{ goal.title }}</span>
             </div>
             <div class="goal-card__actions">
-              <button class="icon-action" title="Visualizar como aluno" @click="previewGoal(goal.id)">
+              <button
+                class="icon-action"
+                title="Visualizar como aluno"
+                aria-label="Visualizar meta como aluno"
+                @click="previewGoal(goal.id)"
+              >
                 <Eye :size="11" />
               </button>
-              <button class="icon-action" title="Copiar para outro plano" @click="openCopy(goal)">
+              <button
+                class="icon-action"
+                title="Copiar para outro plano"
+                aria-label="Copiar meta para outro plano"
+                @click="openCopy(goal)"
+              >
                 <Copy :size="11" />
               </button>
-              <button class="icon-action icon-action--danger" @click="removeGoal(goal.id)">
+              <button
+                class="icon-action icon-action--danger"
+                title="Excluir meta"
+                aria-label="Excluir meta"
+                @click="removeGoal(goal.id)"
+              >
                 <Trash2 :size="11" />
               </button>
             </div>
@@ -62,15 +82,40 @@
             </p>
 
             <div
-              v-for="taskId in goal.taskIds"
+              v-for="(taskId, idx) in goal.taskIds"
               :key="taskId"
-              class="goal-task-chip"
+              :class="['goal-task-chip', {
+                'goal-task-chip--dragging': dragChip?.goalId === goal.id && dragChip?.idx === idx,
+                'goal-task-chip--dragover': dragOverChip?.goalId === goal.id && dragOverChip?.idx === idx && !(dragChip?.goalId === goal.id && dragChip?.idx === idx),
+              }]"
+              draggable="true"
+              @dragstart="onChipDragStart(goal.id, idx, $event)"
+              @dragover="onChipDragOver(goal.id, idx, $event)"
+              @drop="onChipDrop(goal.id, idx, $event)"
+              @dragend="onChipDragEnd"
             >
+              <span class="goal-task-chip__order" :title="`Ordem de execução: ${idx + 1}`">
+                {{ idx + 1 }}
+              </span>
               <span class="goal-task-chip__badge" :class="`chip-badge--${getTask(taskId)?.type}`">
                 {{ typeLabel(getTask(taskId)?.type) }}
               </span>
               <span class="goal-task-chip__name">{{ getTask(taskId)?.title ?? '—' }}</span>
-              <button class="goal-task-chip__remove" @click="removeChip(goal.id, taskId)">
+              <button
+                v-if="getTask(taskId)"
+                class="goal-task-chip__action"
+                title="Criar revisão desta tarefa"
+                aria-label="Criar revisão desta tarefa"
+                @click.stop="criarRevisaoDaTask(taskId)"
+              >
+                <RotateCcw :size="10" />
+              </button>
+              <button
+                class="goal-task-chip__remove"
+                title="Remover tarefa da meta"
+                aria-label="Remover tarefa da meta"
+                @click.stop="removeChip(goal.id, taskId)"
+              >
                 <X :size="10" />
               </button>
             </div>
@@ -112,7 +157,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, FolderOpen, Trash2, Copy, X, Eye } from 'lucide-vue-next'
+import { Plus, FolderOpen, Trash2, Copy, X, Eye, RotateCcw } from 'lucide-vue-next'
 import { usePlanStore } from '@/stores/usePlanStore'
 import { useTaskStore } from '@/stores/useTaskStore'
 import { toast } from 'vue-sonner'
@@ -218,6 +263,92 @@ function confirmCopy() {
 
 const removeChip = (goalId, taskId) =>
   planStore.removeTaskFromGoal(props.planId, goalId, taskId)
+
+// ── Reordenação de tasks dentro de uma goal (drag entre chips) ──────
+const dragChip = ref(null)      // { goalId, idx } — chip sendo arrastado
+const dragOverChip = ref(null)  // { goalId, idx } — chip alvo do drop
+
+function onChipDragStart(goalId, idx, event) {
+  dragChip.value = { goalId, idx }
+  // Marca tipo distinto pra goal-card.onDrop não confundir com task externa
+  event.dataTransfer.setData('reorder-chip', '1')
+  event.dataTransfer.effectAllowed = 'move'
+  event.stopPropagation() // evita drag emergir como drop de task no card
+}
+
+function onChipDragOver(goalId, idx, event) {
+  if (!dragChip.value || dragChip.value.goalId !== goalId) return
+  event.preventDefault()
+  event.stopPropagation()
+  dragOverChip.value = { goalId, idx }
+}
+
+async function onChipDrop(goalId, idxDestino, event) {
+  event.preventDefault()
+  event.stopPropagation()
+  const src = dragChip.value
+  dragChip.value = null
+  dragOverChip.value = null
+  if (!src) return
+  // Reorder só faz sentido na mesma goal — drop em outra goal mostra dica.
+  if (src.goalId !== goalId) {
+    toast.info('Pra mover entre metas, remova daqui e arraste a tarefa do painel.')
+    return
+  }
+  if (src.idx === idxDestino) return
+
+  const goal = planStore.goals.find(g => g.id === goalId)
+  if (!goal) return
+  const ordemAntiga = [...goal.taskIds]
+  const novaOrdem = [...ordemAntiga]
+  const [moved] = novaOrdem.splice(src.idx, 1)
+  novaOrdem.splice(idxDestino, 0, moved)
+
+  // Update otimista: aplica na UI antes do await pra evitar flicker;
+  // reverte se backend falhar.
+  goal.taskIds = novaOrdem
+  try {
+    await planStore.updateGoal(props.planId, goalId, { taskIds: novaOrdem })
+  } catch (err) {
+    goal.taskIds = ordemAntiga
+    // Backend rejeita reorder se o conjunto de taskIds mudou desde o último
+    // fetch (race: outra aba adicionou/removeu). Detecta e refetcha em vez
+    // de jogar mensagem técnica no mentor.
+    const msg = err.response?.data?.message || ''
+    if (err.response?.status === 400 && /reorden/i.test(msg)) {
+      try { await planStore.fetchGoals(props.planId) } catch {}
+      toast.warning('Outra aba mudou esta meta. Estado atualizado aqui.')
+    } else {
+      toast.error(msg || err.message || 'Erro ao reordenar.')
+    }
+  }
+}
+
+function onChipDragEnd() {
+  dragChip.value = null
+  dragOverChip.value = null
+  dragOverId.value = null // limpa highlight do card caso tenha vazado
+}
+
+function onCardDragOver(goalId, _event) {
+  // Bail-out: se reorder de chip está ativo, NÃO mexer no dragOverId
+  // (evita reescrita por frame durante o movimento do mouse).
+  if (dragChip.value) return
+  dragOverId.value = goalId
+}
+
+// ── Criar revisão de uma task já em meta ────────────────────────────
+async function criarRevisaoDaTask(taskId) {
+  const original = taskStore.getById(taskId)
+  const nomeOriginal = original?.title || 'esta tarefa'
+  if (!confirm(`Criar nova tarefa de revisão a partir de "${nomeOriginal}"?`)) return
+  try {
+    const revisao = await taskStore.criarRevisao(taskId, { planId: props.planId })
+    toast.success(`Revisão "${revisao.title}" criada. Arraste para uma meta.`)
+  } catch (err) {
+    toast.error(err.response?.data?.message || err.message || 'Erro ao criar revisão.')
+  }
+}
 </script>
 
 <style scoped>
@@ -380,7 +511,28 @@ const removeChip = (goalId, taskId) =>
   border-radius: 20px;
   padding: 3px 8px 3px 5px;
   font-size: 11px;
+  cursor: grab;
+  transition: opacity 0.12s, border-color 0.12s, transform 0.12s;
 }
+.goal-task-chip:active { cursor: grabbing; }
+.goal-task-chip--dragging { opacity: 0.4; }
+.goal-task-chip--dragover {
+  border-color: #534AB7; transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(83, 74, 183, 0.15);
+}
+.goal-task-chip__order {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px;
+  background: #1F2937; color: #fff;
+  font-size: 9px; font-weight: 700;
+  border-radius: 999px;
+}
+.goal-task-chip__action {
+  background: transparent; border: none; cursor: pointer; color: #bbb;
+  display: flex; align-items: center; padding: 0;
+  transition: color 0.12s;
+}
+.goal-task-chip__action:hover { color: #534AB7; }
 
 .goal-task-chip__badge {
   font-size: 9px;

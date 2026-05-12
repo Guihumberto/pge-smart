@@ -182,7 +182,9 @@ Variável reativa: `estado: 'entrada' | 'preview' | 'resultado' | 'priorizacao'`
 - Árvore editável de 4 níveis:
   - disciplina → assuntos → sub_assuntos → sub_sub_assuntos (folhas string).
   - Cada nó tem input de nome, botão remover. Disciplinas e assuntos com filhos têm chevron de expand/collapse.
-  - Estado de expansão em `treeState.value = { discs: {idx: bool}, assuntos: {'di-ai': bool} }`.
+  - **Promover assunto a disciplina** (botão ↥ ao lado da lixeira em cada assunto): cobre o caso em que o parser regex grudou uma disciplina dentro de outra como assunto (ex.: "Auditoria" caindo dentro de "Direito Financeiro"). Função: `promoverAssuntoADisciplina(di, ai)`.
+  - O confirm descreve quantos sub-assuntos vão migrar (ou avisa que a disciplina vai nascer vazia), alerta se `fontes_explicitas` serão descartadas, e — se já existe disciplina com o mesmo nome (case-insensitive) — oferece **mesclar** em vez de duplicar. Mutações invalidam `_analiseStatus` da disciplina afetada e são bloqueadas se ela estiver em `processando`.
+  - Estado de expansão em `treeState.value = { discs: {idx: bool}, assuntos: {'di-ai': bool} }`. Helpers `removeDisciplinaTree`, `removeAssuntoTree`, `inserirDisciplinaTree` ajustam as chaves após splice (evita estado stale).
 - **Painel de validação de completude** (`validacao` computed):
   - Extrai itens numerados do texto bruto via regex (`\d{1,2}(?:\.\d{1,2}){0,2}\s+`).
   - Compara com nomes na árvore parseada.
@@ -344,6 +346,7 @@ Boot da `CargoConteudoView` (`onMounted`):
 - **Erros silenciosos no parse "all"** — se uma das disciplinas falhar dentro do bloco único, todo o lote é marcado como erro sem detalhar qual. Modo `by_discipline` é o caminho seguro para texto problemático.
 - **`disc._aberto`, `_selecionado`, `_parseStatus`, `_analiseStatus`, `_analiseFase`, `_parseErro`** são flags **só de UI** — não devem ser enviadas em `salvarConteudo`. Hoje vão junto no JSON.parse/stringify; o back ignora, mas é dívida.
 - **`disciplinasConhecidas` precisa estar carregado antes do `processarRegex`** — `onMounted` faz `Promise.all` mas se o usuário mudar de cargo via SPA navigation antes do fetch terminar, a segmentação fica pior. `dictsStore` é persistido para mitigar.
+- **Disciplinas curtas (≤ 9 chars) em CAIXA ALTA caem como assunto** — Pattern 3 em [editalParser.js:95](../src/utils/editalParser.js#L95) exige `{10,}` chars; o filtro pós-match em [editalParser.js:111](../src/utils/editalParser.js#L111) ainda rejeita matches de palavra única (qualquer pattern). Resultado: "AUDITORIA" (9), "ECONOMIA" (8), "HISTÓRIA" (8) só viram disciplina se estiverem em `dictsStore.disciplinas`; caso contrário viram "assunto" da disciplina anterior. Recovery: botão ↥ no estado `resultado` (`promoverAssuntoADisciplina`). Mitigação ampla: garantir essas disciplinas no `SEED_DISCIPLINAS` do backend — **lembre que `seedDicts()` faz early-return se o índice já tem dados** ([dict.service.js:82](../../plan-leges/src/modules/dicts/dict.service.js#L82)); para instâncias existentes, é preciso cadastrar manualmente via UI/`dictsService.create`.
 
 ## 11. Vinculação de normas (PR4 + PR5)
 
