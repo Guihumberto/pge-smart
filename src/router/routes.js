@@ -103,6 +103,12 @@ export default [
         component: () => import('@/views/CargoConteudoView.vue'),
         meta: { requiresAuth: true }
       },
+      {
+        path: 'editais/:id/cargos/:cargoId/imprimir',
+        name: 'CargoImprimir',
+        component: () => import('@/views/PrintView.vue'),
+        meta: { requiresAuth: true }
+      },
       { path: 'mentor/plano/:id',
         name: 'PlanManage',     
         component: () => import('@/views/PlanManageView.vue'),     
