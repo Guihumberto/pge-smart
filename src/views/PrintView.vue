@@ -754,6 +754,25 @@ onMounted(fetchData)
   .toolbar__back { display: none; }
   .toolbar__toggles { width: 100%; order: 2; }
   .toolbar__download { order: 1; margin-left: auto; }
+
+  /* Capa mais compacta, mantém impacto visual pra screenshot em stories */
+  .capa { padding: 16mm 10mm; padding-bottom: 18mm; }
+  .capa__subtitulo { font-size: 9pt; letter-spacing: 0.14em; margin-bottom: 10mm; }
+  .capa__titulo { font-size: 32pt; line-height: 1.0; }
+  .capa__cargo { font-size: 18pt; margin-bottom: 12mm; }
+  .capa__stats-linha { font-size: 11pt; }
+  .capa__chip { font-size: 8pt; padding: 0.5mm 2.5mm; }
+
+  /* Conteúdo mais denso em mobile */
+  .disciplina { padding: 8mm 10mm 12mm; }
+  .disciplina__header { grid-template-columns: 14mm 1fr; gap: 3mm; padding-bottom: 4mm; }
+  .disciplina__romano { font-size: 32pt; padding-right: 2mm; }
+  .disciplina__nome { font-size: 18pt; }
+  .assunto-titulo { font-size: 13pt; }
+  .assunto-header { grid-template-columns: 5mm 1fr auto; gap: 2mm; }
+  .checkbox, .checkbox-spacer { width: 3.5mm; height: 3.5mm; }
+  .sub-assunto, .sub-sub { font-size: 10pt; }
+  .sub-sub { font-size: 9pt; }
 }
 
 /* ════ Print ════ */

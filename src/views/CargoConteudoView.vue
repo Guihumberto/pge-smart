@@ -2775,8 +2775,15 @@ function onTasksCriadas({ planId, tasks, partial }) {
   border: 1px solid #7C2D2A; border-radius: 8px;
   padding: 6px 12px; cursor: pointer;
   transition: all 0.15s;
+  white-space: nowrap;
 }
 .btn-imprimir:hover { background: #7C2D2A; color: #fff; }
+/* Mobile: no wrap do header, mantém botão visível mas compacto.
+   Padding 8/12 garante click area ~40×32px (próximo do mínimo iOS 44px). */
+@media (max-width: 640px) {
+  .btn-imprimir { margin-left: 0; padding: 8px 12px; font-size: 11px; }
+  .btn-imprimir span { display: none; }
+}
 .breadcrumb__item { color: #534AB7; cursor: pointer; font-weight: 500; }
 .breadcrumb__item:hover { text-decoration: underline; }
 .breadcrumb__sep { color: #ccc; }
