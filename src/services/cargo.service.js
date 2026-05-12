@@ -81,4 +81,15 @@ export const cargoService = {
     const { data } = await http.post(`/editais/${editalId}/cargos/${cargoId}/leis/${normaId}/desvincular`)
     return data?.norma
   },
+
+  // ── Edital verticalizado (PDF) ────────────────────────────────
+
+  async gerarConteudoPdf(editalId, cargoId, opts) {
+    const { data } = await http.post(
+      `/editais/${editalId}/cargos/${cargoId}/conteudo/pdf`,
+      opts,
+      { responseType: 'blob', timeout: 60000 }
+    )
+    return data // Blob
+  },
 }
