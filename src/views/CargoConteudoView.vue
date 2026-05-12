@@ -15,6 +15,15 @@
         <ChevronRight :size="12" class="breadcrumb__sep" />
         <span class="breadcrumb__current">{{ cargo?.nome || 'Cargo' }}</span>
       </div>
+      <button
+        v-if="!mounting && cargo"
+        class="btn-imprimir"
+        @click="router.push(`/editais/${editalId}/cargos/${cargoId}/imprimir`)"
+        title="Visualizar e imprimir o edital verticalizado"
+      >
+        <Printer :size="14" />
+        <span>Imprimir edital</span>
+      </button>
     </div>
 
     <!-- Loading inicial — só esconde os estados, header continua acessível -->
@@ -239,7 +248,7 @@
             <BookOpen :size="14" class="tree__icon tree__icon--disc" />
             <input v-model="disc.nome" class="tree__input tree__input--disc" @click.stop />
             <span class="tree__count">{{ disc.assuntos?.length || 0 }} assuntos</span>
-            <button class="icon-btn icon-btn--sm" @click.stop="removeTreeNode(conteudoParseado.disciplinas, di)">
+            <button class="icon-btn icon-btn--sm" @click.stop="removeDisciplinaTree(di)">
               <Trash2 :size="11" />
             </button>
           </div>
@@ -257,7 +266,14 @@
                 <span v-else class="tree__toggle-spacer" />
                 <List :size="13" class="tree__icon tree__icon--assunto" />
                 <input v-model="assunto.nome" class="tree__input" @click.stop />
-                <button class="icon-btn icon-btn--sm" @click.stop="removeTreeNode(disc.assuntos, ai)">
+                <button
+                  class="icon-btn icon-btn--sm icon-btn--accent"
+                  title="Transformar em disciplina"
+                  @click.stop="promoverAssuntoADisciplina(di, ai)"
+                >
+                  <ArrowUpFromLine :size="11" />
+                </button>
+                <button class="icon-btn icon-btn--sm" @click.stop="removeAssuntoTree(di, ai)">
                   <Trash2 :size="11" />
                 </button>
               </div>
@@ -364,25 +380,20 @@
     <!-- Estado 4 — Priorização                                   -->
     <!-- ══════════════════════════════════════════════════════════ -->
     <div v-else-if="estado === 'priorizacao'" class="estado-priorizacao">
-      <!-- Banner: cargo com disciplinas legadas OU recálculo em andamento -->
-      <!-- Mostra só quando: ocioso + tem legadas, OU em modo 'tudo' (recálculo total).
-           Modo 'individual' usa o spinner do botão "Reanalisar" + spinner na fila do header. -->
-      <div v-if="temDisciplinaLegada || modoAnalise === 'tudo'" class="prio-banner-legacy">
+      <!-- Banner A: recálculo em andamento -->
+      <div v-if="modoAnalise === 'tudo'" class="prio-banner-legacy">
         <AlertTriangle :size="16" />
         <div class="prio-banner-legacy__body">
-          <strong v-if="!analisando">Esta priorização tem disciplinas analisadas com a versão antiga.</strong>
-          <strong v-else>Recalculando priorização disciplina por disciplina...</strong>
-          <p v-if="!analisando">Recalcule para usar métricas determinísticas (presença, peso médio, tendência calculados sobre o histórico importado).</p>
-          <!-- PR8: feedback visual durante recalcularTudoPR6 — reusa disc._analiseStatus (idêntico ao iniciarAnalise) -->
-          <div v-if="analisando && filaTotalSelecionadas" class="fila-progresso">
+          <strong>Recalculando priorização disciplina por disciplina...</strong>
+          <div v-if="filaTotalSelecionadas" class="fila-progresso">
             <div class="fila-progresso__bar">
               <div class="fila-progresso__fill" :style="{ width: filaProgressoPct + '%' }" />
             </div>
             <span class="fila-progresso__text">{{ filaProcessadas }}/{{ filaTotalSelecionadas }} disciplinas</span>
           </div>
-          <ul v-if="analisando" class="recalc-fases">
+          <ul class="recalc-fases">
             <li
-              v-for="d in (priorizacaoData.disciplinas || [])"
+              v-for="d in disciplinasLegadas"
               :key="d.nome"
               :class="`recalc-fases__item recalc-fases__item--${d._analiseStatus || 'aguardando'}`"
             >
@@ -397,9 +408,38 @@
             </li>
           </ul>
         </div>
-        <button class="btn-outline btn-outline--sm" :disabled="analisando" @click="recalcularTudoPR6">
-          {{ analisando ? 'Recalculando...' : 'Recalcular tudo' }}
+        <button class="btn-outline btn-outline--sm" disabled>Recalculando...</button>
+      </div>
+
+      <!-- Banner B: legadas ainda não recalculadas (primeira vez) -->
+      <div v-else-if="temDisciplinaLegada && !recalculoJaRealizado" class="prio-banner-legacy">
+        <AlertTriangle :size="16" />
+        <div class="prio-banner-legacy__body">
+          <strong>{{ disciplinasLegadas.length }} {{ disciplinasLegadas.length === 1 ? 'disciplina analisada' : 'disciplinas analisadas' }} com versão anterior.</strong>
+          <p>Recalcule para usar métricas determinísticas (presença, peso médio, tendência sobre o histórico importado).</p>
+          <div class="recalc-legadas-list">
+            <span v-for="d in disciplinasLegadas" :key="d.nome" class="recalc-legada-tag">{{ d.nome }}</span>
+          </div>
+        </div>
+        <button class="btn-outline btn-outline--sm" @click="recalcularTudoPR6">
+          Recalcular ({{ disciplinasLegadas.length }})
         </button>
+      </div>
+
+      <!-- Banner C: recálculo já tentado mas disciplinas ainda sem histórico -->
+      <div v-else-if="temDisciplinaLegada && recalculoJaRealizado && !bannerSemMatchOculto" class="prio-banner-legacy prio-banner-legacy--info">
+        <Info :size="16" />
+        <div class="prio-banner-legacy__body">
+          <strong>{{ disciplinasLegadas.length }} {{ disciplinasLegadas.length === 1 ? 'disciplina sem' : 'disciplinas sem' }} correspondência no histórico.</strong>
+          <p>Não foram encontrados dados estatísticos importados para {{ disciplinasLegadas.length === 1 ? 'esta disciplina' : 'estas disciplinas' }}. Importe mais estatísticas na tela de Estatísticas e use "Reanalisar".</p>
+          <div class="recalc-legadas-list">
+            <span v-for="d in disciplinasLegadas" :key="d.nome" class="recalc-legada-tag recalc-legada-tag--sem-match">{{ d.nome }}</span>
+          </div>
+        </div>
+        <div class="prio-banner-legacy__actions">
+          <button class="btn-ghost btn-ghost--sm" @click="ocultarBannerSemMatch">Entendi, ocultar</button>
+          <button class="btn-ghost btn-ghost--sm" style="opacity:0.6; font-size:11px;" @click="resetarFlagRecalculo">Tentar novamente</button>
+        </div>
       </div>
 
       <!-- Aviso de fonte da cascata — §6.5 (D14): quando majoritária ≠ nível 1 ou há mistura -->
@@ -414,20 +454,52 @@
       <div class="section-header section-header--row">
         <div>
           <h2 class="section-title">Priorização do Conteúdo</h2>
-          <p class="section-desc">
-            Scores baseados no histórico de questões.
-            <!-- §6.7 (D20 obrigatório): vocabulário "provas importadas" — preserva campos legados -->
-            <span v-if="priorizacaoMeta" class="prio-meta">
-              Banca alvo: <strong>{{ priorizacaoMeta.bancaAlvo }}</strong>
-              <template v-if="priorizacaoMeta.qtdAnosBancaAlvo > 0">
-                · {{ priorizacaoMeta.qtdAnosBancaAlvo }} {{ priorizacaoMeta.qtdAnosBancaAlvo === 1 ? 'prova importada' : 'provas importadas' }}
-              </template>
-              <template v-else>(sem histórico)</template>
-              <template v-if="coberturaMatchMedia != null && coberturaMatchMedia < 1">
-                · cobertura média: {{ (coberturaMatchMedia * 100).toFixed(0) }}%
-              </template>
+          <p class="section-desc">Scores baseados no histórico de questões importado.</p>
+
+          <!-- Contexto da análise: banca + área usadas pelo backend -->
+          <div class="prio-contexto">
+            <span class="prio-contexto__item">
+              <span class="prio-contexto__label">Banca:</span>
+              <strong>{{ priorizacaoMeta?.bancaAlvo || edital?.banca || '—' }}</strong>
+              <span v-if="!priorizacaoMeta && edital?.banca" class="prio-contexto__hint">(do edital)</span>
             </span>
-          </p>
+            <span class="prio-contexto__sep">·</span>
+            <span class="prio-contexto__item">
+              <span class="prio-contexto__label">Área:</span>
+              <strong>{{ priorizacaoMeta?.areaAlvo || cargo?.area || '—' }}</strong>
+              <span v-if="!priorizacaoMeta && cargo?.area" class="prio-contexto__hint">(do cargo)</span>
+            </span>
+            <template v-if="priorizacaoMeta">
+              <span class="prio-contexto__sep">·</span>
+              <span class="prio-contexto__item" :class="{ 'prio-contexto__item--warn': priorizacaoMeta.qtdAnosBancaAlvo === 0 }">
+                <template v-if="priorizacaoMeta.qtdAnosBancaAlvo > 0">
+                  <strong>{{ priorizacaoMeta.qtdAnosBancaAlvo }}</strong>
+                  {{ priorizacaoMeta.qtdAnosBancaAlvo === 1 ? 'ano com dados' : 'anos com dados' }}
+                </template>
+                <template v-else>
+                  <AlertTriangle :size="12" /> nenhum dado importado para esta banca/área
+                </template>
+              </span>
+              <template v-if="coberturaMatchMedia != null && coberturaMatchMedia < 1">
+                <span class="prio-contexto__sep">·</span>
+                <span class="prio-contexto__item">cobertura {{ (coberturaMatchMedia * 100).toFixed(0) }}%</span>
+              </template>
+            </template>
+            <template v-else>
+              <span class="prio-contexto__sep">·</span>
+              <span class="prio-contexto__item prio-contexto__item--muted">análise ainda não executada</span>
+            </template>
+          </div>
+
+          <!-- Alerta: banca/área configurada mas zero provas encontradas -->
+          <div
+            v-if="priorizacaoMeta && priorizacaoMeta.qtdAnosBancaAlvo === 0 && (edital?.banca || cargo?.area)"
+            class="prio-contexto-alerta"
+          >
+            <AlertTriangle :size="13" />
+            O backend não encontrou estatísticas para <strong>{{ priorizacaoMeta.bancaAlvo || edital?.banca }}</strong> / <strong>{{ priorizacaoMeta.areaAlvo || cargo?.area }}</strong>.
+            Verifique se banca e área das <router-link to="/estatisticas" class="prio-link">estatísticas importadas</router-link> correspondem exatamente às do edital/cargo.
+          </div>
         </div>
         <div
           class="toggle-relevancia"
@@ -468,11 +540,15 @@
       </div>
 
       <!-- Prova já realizada — plano serve como guia/histórico -->
-      <div v-if="provaPassada" class="reorg-alerta reorg-alerta--passed">
+      <div v-if="provaPassada && !reorganizacaoHabilitada" class="reorg-alerta reorg-alerta--passed">
         <Clock :size="16" />
-        <div>
+        <div class="reorg-alerta__body">
           <strong>Prova já realizada.</strong>
-          <p>O plano permanece como guia/referência. Reorganização desativada.</p>
+          <p>Informe uma data base para continuar reorganizando o plano.</p>
+        </div>
+        <div class="reorg-field reorg-field--inline">
+          <label>Data base</label>
+          <input v-model="reorgConfig.dataBase" type="date" :min="hoje" />
         </div>
       </div>
       <!-- Banner de alerta quando semanas excedem -->
@@ -493,7 +569,11 @@
       </div>
 
       <!-- Painel de reorganização -->
-      <div v-if="showReorganizar && !provaPassada" class="reorg-panel">
+      <div v-if="showReorganizar && reorganizacaoHabilitada" class="reorg-panel">
+        <div v-if="provaPassada && reorganizacaoHabilitada" class="reorg-info-aviso">
+          <Info :size="14" />
+          <span>Prova já realizada — usando data base alternativa como referência.</span>
+        </div>
         <h3 class="reorg-panel__title">Configuração</h3>
         <div class="reorg-config">
           <div class="reorg-field">
@@ -508,6 +588,10 @@
             <label>Sem. revisão</label>
             <input v-model.number="reorgConfig.semanasRevisao" type="number" min="0" max="6" />
           </div>
+          <div class="reorg-field">
+            <label>Data base</label>
+            <input v-model="reorgConfig.dataBase" type="date" :min="hoje" />
+          </div>
           <button class="btn-primary" :disabled="reorganizando" @click="calcularOpcoes">
             {{ reorganizando ? 'Calculando...' : 'Calcular opções' }}
           </button>
@@ -519,6 +603,12 @@
           <span>Disponível: <strong>{{ reorgResult.diagnostico.horasDisponiveis }}h</strong></span>
           <span v-if="reorgResult.diagnostico.temDeficit" class="reorg-diag--deficit">
             Déficit: <strong>{{ reorgResult.diagnostico.deficit.toFixed(0) }}h</strong>
+          </span>
+          <span v-if="reorgResult.diagnostico.assuntosCobertos" class="reorg-diag--cobertos">
+            {{ reorgResult.diagnostico.assuntosCobertos }} já concluídos excluídos
+          </span>
+          <span v-if="labelIntensidade" :class="['reorg-label-intensidade', labelIntensidade.classe]">
+            {{ labelIntensidade.texto }}
           </span>
         </div>
 
@@ -546,14 +636,35 @@
               <div v-if="opcao.assuntosCortados?.length" class="reorg-cortados">
                 <p class="reorg-cortados__label">Assuntos cortados:</p>
                 <div v-for="(c, ci) in opcao.assuntosCortados" :key="ci" class="reorg-cortado-item">
-                  <span>{{ c.disciplina }} → {{ c.assunto }}</span>
+                  <span class="reorg-cortado-nome">
+                    {{ c.disciplina }} → {{ c.assunto }}
+                    <span
+                      v-if="c.temNorma"
+                      class="reorg-cortado-badge"
+                      aria-label="Tem legislação vinculada pelo mentor"
+                      title="Tem legislação vinculada pelo mentor"
+                    >
+                      <Link2 :size="10" aria-hidden="true" /> norma vinculada
+                    </span>
+                  </span>
                   <span class="reorg-cortado-score">
-                    {{ c.score == null ? 'sem match' : `score ${(c.score * 100).toFixed(0)}` }} · {{ c.carga }}h
+                    {{ c.score == null ? 'sem match' : `score ${(c.score * 100).toFixed(0)}` }} ·
+                    <span v-if="c.peso && c.peso !== 1">
+                      {{ c.cargaBase }}h × {{ c.peso }} = {{ c.carga }}h
+                    </span>
+                    <span v-else>{{ c.carga }}h</span>
                   </span>
                 </div>
               </div>
+              <div v-if="opcao.cortadosComNorma > 0" class="reorg-aviso reorg-aviso--norma">
+                <AlertTriangle :size="12" aria-hidden="true" />
+                {{ opcao.cortadosComNorma === 1
+                  ? '1 assunto acima tem legislação vinculada pelo mentor'
+                  : `${opcao.cortadosComNorma} assuntos acima têm legislação vinculada pelo mentor` }}
+                — revise antes de aplicar.
+              </div>
               <div v-if="opcao.aviso" class="reorg-aviso">
-                <AlertTriangle :size="12" />
+                <AlertTriangle :size="12" aria-hidden="true" />
                 {{ opcao.aviso }}
               </div>
             </div>
@@ -627,6 +738,14 @@
                 {{ cargaComPeso(disc) }}h
               </span>
               <span v-if="disc.sugestao_semana" class="prio-semana">Sem {{ disc.sugestao_semana }}</span>
+              <button
+                v-if="disc.assuntos?.some(a => !a.cortado)"
+                class="prio-disc__btn-gerar"
+                title="Criar tarefas a partir desta priorização"
+                @click.stop="abrirGeradorTasks(disc)"
+              >
+                <ListPlus :size="11" /> Criar tarefas
+              </button>
             </div>
           </div>
 
@@ -714,7 +833,7 @@
                     <span
                       v-else-if="qualityBadge(ass) === 'never-covered'"
                       class="prio-badge-quality prio-badge-quality--rare"
-                      title="Tema existe no histórico mas não foi cobrado nas provas importadas. Score baixo até primeira cobrança."
+                      title="Tema existe no histórico mas não aparece nos dados importados para esta banca/área. Score baixo até primeira ocorrência."
                     >Mapeado · nunca cobrado</span>
                     <span
                       v-else-if="qualityBadge(ass) === 'small-sample'"
@@ -743,7 +862,7 @@
                   <details v-if="ass.metricas && !ass.metricas.sem_match" class="prio-metricas-detalhes">
                     <summary>Métricas detalhadas</summary>
                     <div class="prio-metricas-detalhes__grid">
-                      <span>Presente em {{ ass.metricas.anos_que_cobraram }} de {{ ass.metricas.anos_com_prova }} provas importadas</span>
+                      <span>Presente em {{ ass.metricas.anos_que_cobraram }} de {{ ass.metricas.anos_com_prova }} anos importados</span>
                       <!-- PR7: Recência (cobertura nos últimos 3 do universo) — oculta em legados / universo degenerado -->
                       <span v-if="ass.metricas.recencia_anos_total">
                         Recência: cobriu {{ ass.metricas.recencia_anos_cobertos }} dos {{ ass.metricas.recencia_anos_total }} anos mais recentes ({{ (ass.metricas.recencia * 100).toFixed(0) }}%)
@@ -804,7 +923,7 @@
                       <span
                         v-else-if="qualityBadge(sub) === 'never-covered'"
                         class="prio-badge-quality prio-badge-quality--rare"
-                        title="Tema existe no histórico mas não foi cobrado nas provas importadas"
+                        title="Tema existe no histórico mas não aparece nos dados importados para esta banca/área"
                       >Nunca cobrado</span>
                       <span
                         v-else-if="qualityBadge(sub) === 'small-sample'"
@@ -826,7 +945,7 @@
                       <details v-if="sub.metricas && !sub.metricas.sem_match" class="prio-metricas-detalhes">
                         <summary>Métricas detalhadas</summary>
                         <div class="prio-metricas-detalhes__grid">
-                          <span>Presente em {{ sub.metricas.anos_que_cobraram }} de {{ sub.metricas.anos_com_prova }} provas importadas</span>
+                          <span>Presente em {{ sub.metricas.anos_que_cobraram }} de {{ sub.metricas.anos_com_prova }} anos importados</span>
                           <!-- PR7: Recência (oculta em legados / universo degenerado) -->
                           <span v-if="sub.metricas.recencia_anos_total">
                             Recência: cobriu {{ sub.metricas.recencia_anos_cobertos }} dos {{ sub.metricas.recencia_anos_total }} anos mais recentes ({{ (sub.metricas.recencia * 100).toFixed(0) }}%)
@@ -955,6 +1074,39 @@
           <button class="btn-outline" :disabled="analisando" @click="abrirVinculacao">
             <Link2 :size="14" /> Vincular normas
           </button>
+          <div class="action-bar__menu-wrap" @click.stop @keydown.esc="menuCriarTasksAberto = false">
+            <button
+              class="btn-primary"
+              :disabled="!disciplinasComCandidates.length"
+              :title="disciplinasComCandidates.length ? 'Criar tarefas a partir da priorização' : 'Sem disciplinas disponíveis'"
+              aria-haspopup="menu"
+              :aria-expanded="menuCriarTasksAberto"
+              aria-controls="criar-tarefas-menu"
+              @click="menuCriarTasksAberto = !menuCriarTasksAberto"
+            >
+              <ListPlus :size="14" /> Criar tarefas
+              <ChevronDown :size="12" />
+            </button>
+            <div
+              v-if="menuCriarTasksAberto"
+              id="criar-tarefas-menu"
+              class="action-bar__menu"
+              role="menu"
+              aria-label="Escolha a disciplina para criar tarefas"
+            >
+              <p class="action-bar__menu-hint">Escolha a disciplina:</p>
+              <button
+                v-for="disc in disciplinasComCandidates"
+                :key="disc.nome"
+                class="action-bar__menu-item"
+                role="menuitem"
+                @click="menuCriarTasksAberto = false; abrirGeradorTasks(disc)"
+              >
+                <span class="action-bar__menu-item-nome">{{ disc.nome }}</span>
+                <span class="action-bar__menu-item-count">{{ disc.assuntos.filter(a => !a.cortado).length }}</span>
+              </button>
+            </div>
+          </div>
           <button class="btn-primary btn-primary--accent" @click="router.push(`/editais/${editalId}/cargos/${cargoId}/plano`)">
             <CalendarDays :size="14" /> Plano de Estudo
           </button>
@@ -977,22 +1129,39 @@
       />
     </div>
 
+    <!-- Gerador de tarefas (a partir da priorização do cargo) -->
+    <TaskGeneratorModal
+      v-if="taskGenerator.aberto"
+      :candidates="taskGenerator.candidates"
+      :discipline-name="taskGenerator.disciplineName"
+      :contexto-plano="taskGenerator.contextoPlano"
+      origem="cargo"
+      :origem-dados="taskGenerator.origemDados"
+      :title="`Criar tarefas — ${taskGenerator.disciplineName}`"
+      :subtitle="`Baseado na priorização do cargo`"
+      @close="taskGenerator.aberto = false"
+      @created="onTasksCriadas"
+    />
+
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   ChevronLeft, ChevronRight, ChevronDown, Zap, Plus, Trash2,
   AlertTriangle, BookOpen, List, ListTree, Circle, Save, X, Loader2, CheckCircle,
   ChevronsDownUp, ChevronsUpDown, TrendingUp, TrendingDown, Minus, RefreshCw,
-  CalendarDays, Clock, Info, Link2,
+  CalendarDays, Clock, Info, Link2, Sparkles, ListPlus, ArrowUpFromLine, Printer,
 } from 'lucide-vue-next'
 import LeisVinculacaoPanel from '@/components/workspace/LeisVinculacaoPanel.vue'
+import TaskGeneratorModal from '@/components/task-generator/TaskGeneratorModal.vue'
+import { cargoToCandidates } from '@/utils/taskCandidateAdapters'
 import { useEditalStore } from '@/stores/useEditalStore'
 import { useCargoStore } from '@/stores/useCargoStore'
 import { useDictsStore } from '@/stores/useDictsStore'
+import { usePlanStore } from '@/stores/usePlanStore'
 import { cargoService } from '@/services/cargo.service'
 import { limpar, segmentar } from '@/utils/editalParser'
 import { toast } from 'vue-sonner'
@@ -1002,6 +1171,7 @@ const route = useRoute()
 const editalStore = useEditalStore()
 const cargoStore = useCargoStore()
 const dictsStore = useDictsStore()
+const planStore = usePlanStore()
 
 const editalId = computed(() => route.params.id)
 const cargoId = computed(() => route.params.cargoId)
@@ -1409,6 +1579,155 @@ function toggleTreeAll(expand) {
 
 function removeTreeNode(arr, idx) {
   arr.splice(idx, 1)
+}
+
+// Bloqueia mutação na árvore quando a disciplina está sendo analisada
+// (a fila de análise itera o array e mexer no meio bagunça os índices)
+function bloqueadoSeAnalisando(di) {
+  if (conteudoParseado.value.disciplinas[di]?._analiseStatus === 'processando') {
+    toast.error('Aguarde a análise dessa disciplina terminar.')
+    return true
+  }
+  return false
+}
+
+// Remove disciplina + ajusta as chaves do treeState para refletir o shift de índices
+function removeDisciplinaTree(di) {
+  if (bloqueadoSeAnalisando(di)) return
+  conteudoParseado.value.disciplinas.splice(di, 1)
+  const newDiscs = {}
+  for (const [key, val] of Object.entries(treeState.value.discs)) {
+    const k = Number(key)
+    if (k < di) newDiscs[k] = val
+    else if (k > di) newDiscs[k - 1] = val
+  }
+  const newAssuntos = {}
+  for (const [key, val] of Object.entries(treeState.value.assuntos)) {
+    const [kDi, kAi] = key.split('-').map(Number)
+    if (kDi < di) newAssuntos[key] = val
+    else if (kDi > di) newAssuntos[`${kDi - 1}-${kAi}`] = val
+  }
+  treeState.value.discs = newDiscs
+  treeState.value.assuntos = newAssuntos
+}
+
+// Remove assunto + ajusta chaves `${di}-${ai+k}` -> `${di}-${ai+k-1}`
+// Invalida a análise da disciplina origem (estrutura mudou)
+function removeAssuntoTree(di, ai) {
+  if (bloqueadoSeAnalisando(di)) return
+  const disc = conteudoParseado.value.disciplinas[di]
+  disc.assuntos.splice(ai, 1)
+  disc._analiseStatus = null
+  disc._analiseFase = ''
+  const newAssuntos = {}
+  for (const [key, val] of Object.entries(treeState.value.assuntos)) {
+    const [kDi, kAi] = key.split('-').map(Number)
+    if (kDi !== di || kAi < ai) newAssuntos[key] = val
+    else if (kAi > ai) newAssuntos[`${di}-${kAi - 1}`] = val
+  }
+  treeState.value.assuntos = newAssuntos
+}
+
+// Insere disciplina em insertAt + shift up das chaves para X >= insertAt
+function inserirDisciplinaTree(disciplina, insertAt) {
+  const newDiscs = {}
+  for (const [key, val] of Object.entries(treeState.value.discs)) {
+    const k = Number(key)
+    newDiscs[k < insertAt ? k : k + 1] = val
+  }
+  const newAssuntos = {}
+  for (const [key, val] of Object.entries(treeState.value.assuntos)) {
+    const [kDi, kAi] = key.split('-').map(Number)
+    newAssuntos[`${kDi < insertAt ? kDi : kDi + 1}-${kAi}`] = val
+  }
+  treeState.value.discs = newDiscs
+  treeState.value.assuntos = newAssuntos
+  conteudoParseado.value.disciplinas.splice(insertAt, 0, disciplina)
+}
+
+function promoverAssuntoADisciplina(di, ai) {
+  if (bloqueadoSeAnalisando(di)) return
+  const disc = conteudoParseado.value.disciplinas[di]
+  const assunto = disc?.assuntos?.[ai]
+  if (!assunto) return
+
+  const nome = (assunto.nome || '').trim()
+  if (!nome) {
+    toast.error('Preencha o nome do assunto antes de promover.')
+    return
+  }
+
+  const subAssuntos = assunto.sub_assuntos || []
+  const fontes = assunto.fontes_explicitas || []
+
+  const novosAssuntos = subAssuntos.map(sub => ({
+    nome: sub.nome || '',
+    fontes_explicitas: [],
+    sub_assuntos: (sub.sub_sub_assuntos || []).map(ss => ({
+      nome: typeof ss === 'string' ? ss : (ss?.nome || ''),
+      sub_sub_assuntos: [],
+    })),
+  }))
+
+  // Já existe disciplina com este nome? Oferece mesclar
+  const existingIdx = conteudoParseado.value.disciplinas.findIndex(
+    (d, idx) => idx !== di && (d.nome || '').trim().toLowerCase() === nome.toLowerCase()
+  )
+
+  if (existingIdx !== -1) {
+    const destNome = conteudoParseado.value.disciplinas[existingIdx].nome
+    const partes = [`Já existe uma disciplina "${destNome}".`]
+    partes.push(
+      subAssuntos.length
+        ? `Mesclar os ${subAssuntos.length} sub-assunto(s) nela?`
+        : 'O assunto não tem sub-assuntos — nada será mesclado, apenas o assunto será removido.'
+    )
+    if (fontes.length) {
+      partes.push(`Atenção: as fontes explícitas (${fontes.join(', ')}) serão descartadas.`)
+    }
+    if (!confirm(partes.join('\n\n'))) return
+    if (bloqueadoSeAnalisando(existingIdx)) return
+
+    const dest = conteudoParseado.value.disciplinas[existingIdx]
+    if (novosAssuntos.length) {
+      dest.assuntos = (dest.assuntos || []).concat(novosAssuntos)
+      dest._analiseStatus = null
+      dest._analiseFase = ''
+    }
+    treeState.value.discs[existingIdx] = true
+    removeAssuntoTree(di, ai)
+    toast.success(
+      novosAssuntos.length
+        ? `Mesclado em "${destNome}"`
+        : `Assunto removido — nada a mesclar em "${destNome}"`
+    )
+    return
+  }
+
+  const partes = [`Transformar "${nome}" em disciplina?`]
+  partes.push(
+    subAssuntos.length
+      ? `Os ${subAssuntos.length} sub-assunto(s) viram assuntos da nova disciplina.`
+      : 'A nova disciplina será criada vazia (este assunto não tem sub-assuntos).'
+  )
+  if (fontes.length) {
+    partes.push(`Atenção: as fontes explícitas (${fontes.join(', ')}) serão descartadas.`)
+  }
+  if (!confirm(partes.join('\n\n'))) return
+
+  const novaDisciplina = {
+    nome,
+    assuntos: novosAssuntos,
+    _selecionado: false,
+    _analiseStatus: null,
+    _analiseFase: '',
+  }
+
+  inserirDisciplinaTree(novaDisciplina, di + 1)
+  treeState.value.discs[di + 1] = true
+  removeAssuntoTree(di, ai)
+
+  toast.success(`"${nome}" promovida a disciplina`)
 }
 
 // ── Salvar ───────────────────────────────────────────────────
@@ -1841,7 +2160,7 @@ function tooltipScore(item) {
 function tooltipPresenca(item) {
   const m = item?.metricas
   if (!m) return ''
-  return `Presente em ${m.anos_que_cobraram} de ${m.anos_com_prova} provas importadas. Peso médio ${m.peso_medio.toFixed(1)}%`
+  return `Presente em ${m.anos_que_cobraram} de ${m.anos_com_prova} anos importados. Peso médio ${m.peso_medio.toFixed(1)}%`
 }
 
 // ── PR7 helpers (recência + score_v1 — Fase 3 frontend) ──────
@@ -1889,11 +2208,15 @@ function formatDelta(delta) {
 
 // Banner Recalcular (§6.6 / D19): detecta cargos com mistura PR6 + legado.
 // Disciplina PR6 sem match TEM `metricas` (com `sem_match: true`) — não conta como legada.
-const temDisciplinaLegada = computed(() => {
-  const arr = priorizacaoData.value.disciplinas || []
-  if (!arr.length) return false
-  return arr.some(d => !d.metricas)
-})
+const disciplinasLegadas = computed(() =>
+  (priorizacaoData.value.disciplinas || []).filter(d => !d.metricas)
+)
+const temDisciplinaLegada = computed(() => disciplinasLegadas.value.length > 0)
+// Flag: recálculo já foi tentado nesta sessão (ou numa sessão anterior persistida).
+// Evita que o banner de "versão antiga" reapareça quando o backend não tem histórico
+// suficiente para preencher `metricas` em todas as disciplinas.
+const recalculoJaRealizado = ref(false)
+const bannerSemMatchOculto = ref(false)
 
 // Cobertura média (§6.5 / D19) — só sobre disciplinas com metricas
 const coberturaMatchMedia = computed(() => {
@@ -1993,10 +2316,22 @@ async function reanalisarDisciplina(nomeDisc) {
   }
 }
 
+function resetarFlagRecalculo() {
+  recalculoJaRealizado.value = false
+  bannerSemMatchOculto.value = false
+  localStorage.removeItem(`recalc_done_${cargoId.value}`)
+  localStorage.removeItem(`recalc_hide_${cargoId.value}`)
+}
+
+function ocultarBannerSemMatch() {
+  bannerSemMatchOculto.value = true
+  localStorage.setItem(`recalc_hide_${cargoId.value}`, '1')
+}
+
 async function recalcularTudoPR6() {
   if (analisando.value) return                           // guard clause anti-double-click
-  if (!priorizacaoData.value.disciplinas?.length) return
-  const nomes = priorizacaoData.value.disciplinas.map(d => d.nome)
+  if (!disciplinasLegadas.value.length) return
+  const nomes = disciplinasLegadas.value.map(d => d.nome)
 
   analisando.value = true
   modoAnalise.value = 'tudo'
@@ -2063,9 +2398,8 @@ async function recalcularTudoPR6() {
   } finally {
     analisando.value = false
     modoAnalise.value = null
-    // Lista some naturalmente (v-if="analisando" no template). Sem setTimeout — evita memory
-    // leak se componente for desmontado durante recálculo. _analiseStatus pode ficar persistido
-    // no objeto disciplina mas não é renderizado fora do `v-if="analisando"`.
+    recalculoJaRealizado.value = true
+    localStorage.setItem(`recalc_done_${cargoId.value}`, '1')
   }
 }
 
@@ -2098,26 +2432,44 @@ async function salvarEVoltar() {
 const showReorganizar = ref(false)
 const reorganizando = ref(false)
 const aplicandoReorg = ref(false)
-const reorgConfig = ref({ horasPorDia: 4, diasPorSemana: 6, semanasRevisao: 2 })
+const reorgConfig = ref({ horasPorDia: 4, diasPorSemana: 6, semanasRevisao: 2, dataBase: null })
 const reorgResult = ref(null)
 const reorgOpcaoSelecionada = ref(null)
+
+const hoje = new Date().toISOString().split('T')[0]
+
+const planIdParaCargo = computed(() =>
+  planStore.plans.find(p => p.cargoId === cargoId.value)?.id ?? null
+)
 
 const provaPassada = computed(() => {
   if (!edital.value?.data_prova) return false
   return editalStore.countdown(edital.value.data_prova)?.passado === true
 })
 
+const reorganizacaoHabilitada = computed(() => !provaPassada.value || !!reorgConfig.value.dataBase)
+
 const semanasDisponiveisCalc = computed(() => {
-  if (!edital.value?.data_prova) return null
-  if (provaPassada.value) return null // não calcula janela quando prova já passou
-  const dias = editalStore.countdown(edital.value.data_prova)?.total || 0
+  const dataRef = reorgConfig.value.dataBase || edital.value?.data_prova
+  if (!dataRef) return null
+  const countdown = editalStore.countdown(dataRef)
+  if (!countdown || countdown.passado) return null
+  const dias = countdown.total || 0
   return Math.max(1, Math.floor(dias / 7) - reorgConfig.value.semanasRevisao)
 })
 
 const temAlertaSemanas = computed(() => {
-  if (provaPassada.value) return false
   if (!semanasDisponiveisCalc.value) return false
   return totalSemanas.value > semanasDisponiveisCalc.value
+})
+
+const labelIntensidade = computed(() => {
+  if (!semanasDisponiveisCalc.value || !totalSemanas.value) return null
+  const ratio = semanasDisponiveisCalc.value / totalSemanas.value
+  if (ratio < 0.3) return { texto: 'Plano de alto risco', classe: 'intens--risco' }
+  if (ratio < 0.5) return { texto: 'Muito apertado', classe: 'intens--apertado' }
+  if (ratio < 0.7) return { texto: 'Tempo arrojado', classe: 'intens--arrojado' }
+  return null
 })
 
 async function calcularOpcoes() {
@@ -2130,7 +2482,7 @@ async function calcularOpcoes() {
     for (const d of priorizacaoData.value.disciplinas || []) {
       if (d._peso && d._peso !== 1) pesos[d.nome] = d._peso
     }
-    reorgResult.value = await cargoService.reorganizar(editalId.value, cargoId.value, { ...reorgConfig.value, pesos })
+    reorgResult.value = await cargoService.reorganizar(editalId.value, cargoId.value, { ...reorgConfig.value, pesos, planId: planIdParaCargo.value })
     // Auto-seleciona opção B se tem déficit (é a mais equilibrada)
     if (reorgResult.value.diagnostico?.temDeficit) {
       const opcaoB = reorgResult.value.opcoes.find(o => o.tipo === 'cortar_conteudo')
@@ -2156,6 +2508,7 @@ async function aplicarReorganizacao() {
     const result = await cargoService.aplicarReorganizacao(editalId.value, cargoId.value, {
       opcao: reorgOpcaoSelecionada.value,
       config: { ...reorgConfig.value, pesos },
+      planId: planIdParaCargo.value,
     })
     // Atualiza dados locais
     if (result?.priorizacao?.disciplinas?.length) {
@@ -2281,6 +2634,8 @@ onMounted(async () => {
   textoBruto.value = ''
   priorizacaoData.value = { disciplinas: [] }
   priorizacaoMeta.value = null
+  recalculoJaRealizado.value = !!localStorage.getItem(`recalc_done_${cargoId.value}`)
+  bannerSemMatchOculto.value = !!localStorage.getItem(`recalc_hide_${cargoId.value}`)
 
   try {
     await Promise.all([
@@ -2327,6 +2682,83 @@ onMounted(async () => {
   }
 })
 
+// ── Gerador de tarefas a partir da priorização do cargo ───────────────
+const taskGenerator = ref({
+  aberto: false,
+  candidates: [],
+  disciplineName: '',
+  contextoPlano: {},
+  origemDados: {},
+})
+
+// Dropdown da action-bar "Criar tarefas" — lista disciplinas com candidates
+const menuCriarTasksAberto = ref(false)
+const disciplinasComCandidates = computed(() =>
+  (priorizacaoData.value.disciplinas || [])
+    .filter(d => (d.assuntos || []).some(a => !a.cortado))
+)
+
+// Fecha o menu ao clicar fora
+function fecharMenuCriarTasks() { menuCriarTasksAberto.value = false }
+onMounted(() => window.addEventListener('click', fecharMenuCriarTasks))
+onBeforeUnmount(() => window.removeEventListener('click', fecharMenuCriarTasks))
+
+function abrirGeradorTasks(disc) {
+  // `edital` é computed (editalStore.editalAtual) já no escopo
+  const ed = edital.value || {}
+  const contexto = {
+    editalId: editalId.value,
+    cargoId: cargoId.value,
+    bancaEdital: ed.banca || null,
+    areaEdital: ed.area || null,
+  }
+  const { candidates } = cargoToCandidates(cargo.value, disc.nome, contexto)
+  if (!candidates.length) {
+    toast.error('Nenhum assunto disponível nessa disciplina.')
+    return
+  }
+  taskGenerator.value = {
+    aberto: true,
+    candidates,
+    disciplineName: disc.nome,
+    contextoPlano: {
+      cargoId: cargoId.value,
+      editalId: editalId.value,
+      banca: ed.banca || null,
+      area: ed.area || null,
+    },
+    origemDados: {
+      cargoOrigem: cargoId.value,
+      editalOrigem: editalId.value,
+      bancaOrigem: ed.banca || null,
+      areaOrigem: ed.area || null,
+      disciplinaOrigem: disc.nome,
+    },
+  }
+}
+
+function onTasksCriadas({ planId, tasks, partial }) {
+  taskGenerator.value.aberto = false
+  if (partial) {
+    // Plano criado mas bulk falhou — toast com ação (não redireciona automático
+    // pra não arrancar mentor da view de priorização que ele estava).
+    toast.warning('Plano criado mas algumas tarefas falharam.', {
+      action: {
+        label: 'Abrir workspace',
+        onClick: () => router.push(`/workspace?plan=${planId}`),
+      },
+    })
+    return
+  }
+  // Mentor pode estar gerando tasks de várias disciplinas em sequência.
+  toast.success(`${tasks.length} tarefa(s) criada(s) no plano.`, {
+    action: {
+      label: 'Abrir workspace',
+      onClick: () => router.push(`/workspace?plan=${planId}`),
+    },
+  })
+}
+
 </script>
 
 <style scoped>
@@ -2335,6 +2767,16 @@ onMounted(async () => {
 /* Header */
 .conteudo-view__header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.btn-imprimir {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600;
+  color: #7C2D2A; background: transparent;
+  border: 1px solid #7C2D2A; border-radius: 8px;
+  padding: 6px 12px; cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-imprimir:hover { background: #7C2D2A; color: #fff; }
 .breadcrumb__item { color: #534AB7; cursor: pointer; font-weight: 500; }
 .breadcrumb__item:hover { text-decoration: underline; }
 .breadcrumb__sep { color: #ccc; }
@@ -2546,6 +2988,37 @@ onMounted(async () => {
 }
 .action-bar__right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
+/* Dropdown "Criar tarefas" — disciplina picker */
+.action-bar__menu-wrap { position: relative; }
+.action-bar__menu {
+  position: absolute; right: 0; top: calc(100% + 6px);
+  min-width: 240px; max-height: 320px; overflow-y: auto;
+  background: #fff; border: 1px solid #ebe9e4; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  padding: 6px; z-index: 50;
+}
+.action-bar__menu-hint {
+  font-size: 11px; font-weight: 600; color: #888;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 6px 10px 4px; margin: 0;
+}
+.action-bar__menu-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 7px 10px;
+  background: transparent; border: none; border-radius: 6px;
+  font-family: 'DM Sans', sans-serif; font-size: 13px; color: #1a1a2e;
+  cursor: pointer; text-align: left;
+}
+.action-bar__menu-item:hover { background: #EEEDFE; color: #534AB7; }
+.action-bar__menu-item-nome { flex: 1; }
+.action-bar__menu-item-count {
+  font-size: 11px; color: #888; font-weight: 600;
+  background: #f5f4f0; border-radius: 999px; padding: 1px 8px;
+}
+.action-bar__menu-item:hover .action-bar__menu-item-count {
+  background: #fff; color: #534AB7;
+}
+
 .btn-primary {
   display: flex; align-items: center; gap: 6px;
   font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
@@ -2581,6 +3054,8 @@ onMounted(async () => {
 }
 .icon-btn:hover { background: #f0efea; color: #444; }
 .icon-btn--sm { width: 22px; height: 22px; }
+.icon-btn--accent { color: #2563EB; }
+.icon-btn--accent:hover { background: #EFF6FF; color: #1D4ED8; }
 
 /* Action section */
 .action-section {
@@ -2647,6 +3122,27 @@ onMounted(async () => {
   100% { background-position: -200% 0; }
 }
 .prio-meta { font-size: 11px; color: #888; display: block; margin-top: 4px; }
+
+/* Contexto da análise (banca/área/provas) */
+.prio-contexto {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
+  margin-top: 8px; font-size: 12px; color: #64748B;
+}
+.prio-contexto__label { color: #94A3B8; }
+.prio-contexto__sep { color: #CBD5E1; }
+.prio-contexto__hint { font-size: 10px; color: #94A3B8; font-style: italic; margin-left: 2px; }
+.prio-contexto__item { display: inline-flex; align-items: center; gap: 3px; }
+.prio-contexto__item--warn { color: #B45309; font-weight: 500; }
+.prio-contexto__item--warn svg { flex-shrink: 0; }
+.prio-contexto__item--muted { color: #94A3B8; font-style: italic; }
+.prio-contexto-alerta {
+  display: flex; align-items: flex-start; gap: 6px;
+  margin-top: 8px; padding: 8px 10px;
+  background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 6px;
+  font-size: 12px; color: #92400E; line-height: 1.5;
+}
+.prio-contexto-alerta svg { flex-shrink: 0; margin-top: 1px; color: #B45309; }
+.prio-link { color: #534AB7; text-decoration: underline; }
 
 .prio-list {
   background: #fff; border: 1px solid #ebe9e4; border-radius: 12px;
@@ -2824,6 +3320,17 @@ onMounted(async () => {
 }
 .prio-semana--sm { font-size: 9px; }
 
+.prio-disc__btn-gerar {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 700;
+  color: #fff; background: #534AB7;
+  border: 1px solid #534AB7; border-radius: 999px;
+  padding: 4px 10px; cursor: pointer;
+  transition: background 0.12s, transform 0.12s;
+  flex-shrink: 0;
+}
+.prio-disc__btn-gerar:hover { background: #3C3489; transform: translateY(-1px); }
+
 /* Leis referência */
 .prio-leis { display: flex; flex-wrap: wrap; gap: 3px; padding: 2px 0 0 52px; }
 .prio-lei-tag {
@@ -2870,6 +3377,27 @@ onMounted(async () => {
 .prio-banner-legacy__body { flex: 1; }
 .prio-banner-legacy__body strong { color: #78350F; font-size: 13px; }
 .prio-banner-legacy__body p { margin: 4px 0 0; font-size: 12px; color: #92400E; }
+
+/* Banner variante --info (pós-recálculo sem match histórico) */
+.prio-banner-legacy--info {
+  background: #F0F9FF; border-color: #BAE6FD;
+}
+.prio-banner-legacy--info svg { color: #0369A1; }
+.prio-banner-legacy--info .prio-banner-legacy__body strong { color: #0C4A6E; }
+.prio-banner-legacy--info .prio-banner-legacy__body p { color: #075985; }
+
+/* Tags de disciplinas legadas no banner */
+.recalc-legadas-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.recalc-legada-tag {
+  font-size: 11px; padding: 2px 8px; border-radius: 20px;
+  background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D;
+}
+.recalc-legada-tag--sem-match {
+  background: #E0F2FE; color: #0369A1; border-color: #7DD3FC;
+}
+.prio-banner-legacy__actions {
+  display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; align-items: flex-end;
+}
 
 /* PR8: feedback visual do recalcularTudoPR6 — lista de status por disciplina */
 .recalc-fases {
@@ -3000,9 +3528,12 @@ onMounted(async () => {
   border-radius: 10px; font-size: 12px;
 }
 .reorg-alerta p { margin: 4px 0 0; font-weight: 400; }
+.reorg-alerta__body { flex: 1; }
 .reorg-alerta--danger { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
 .reorg-alerta--ok { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
 .reorg-alerta--passed { background: #F8FAFC; color: #475569; border: 1px solid #E2E8F0; }
+.reorg-field--inline { margin-top: 2px; }
+.reorg-field--inline input { width: 130px; }
 .btn-outline--sm { font-size: 11px; padding: 4px 10px; white-space: nowrap; }
 .btn-outline--danger { color: #c0392b; border-color: #f1c0bb; }
 .btn-outline--danger:hover { background: #fdf0ef; border-color: #e8a39a; }
@@ -3026,9 +3557,21 @@ onMounted(async () => {
 
 .reorg-diag {
   display: flex; gap: 16px; font-size: 12px; color: #666;
-  background: #F8FAFC; padding: 8px 12px; border-radius: 6px;
+  background: #F8FAFC; padding: 8px 12px; border-radius: 6px; flex-wrap: wrap; align-items: center;
 }
 .reorg-diag--deficit { color: #DC2626; font-weight: 700; }
+.reorg-diag--cobertos { color: #16A34A; font-size: 11px; }
+.reorg-label-intensidade {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: auto;
+}
+.intens--arrojado { background: #FEF9C3; color: #854D0E; }
+.intens--apertado { background: #FFEDD5; color: #9A3412; }
+.intens--risco    { background: #FEE2E2; color: #7F1D1D; }
+.reorg-info-aviso {
+  display: flex; align-items: center; gap: 6px; font-size: 11px; color: #6366F1;
+  background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 6px; padding: 7px 10px;
+}
+.reorg-field input[type="date"] { width: 130px; font-size: 12px; font-weight: 400; }
 
 .reorg-opcoes { display: flex; flex-direction: column; gap: 8px; }
 .reorg-opcao {
@@ -3049,15 +3592,26 @@ onMounted(async () => {
 .reorg-cortados { margin-top: 8px; }
 .reorg-cortados__label { font-size: 10px; font-weight: 600; color: #888; margin: 0 0 4px; }
 .reorg-cortado-item {
-  display: flex; justify-content: space-between; padding: 3px 8px;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+  padding: 3px 8px;
   background: #FFF7ED; border-radius: 4px; margin-bottom: 2px; font-size: 11px;
 }
-.reorg-cortado-score { color: #9CA3AF; }
+.reorg-cortado-nome { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+.reorg-cortado-score { color: #9CA3AF; white-space: nowrap; flex-shrink: 0; text-align: right; }
+.reorg-cortado-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE;
+  padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 600;
+  white-space: nowrap;
+}
 
 .reorg-aviso {
   display: flex; align-items: flex-start; gap: 6px; margin-top: 8px;
   background: #FEF2F2; padding: 8px 10px; border-radius: 6px;
   font-size: 11px; color: #991B1B; font-weight: 500;
+}
+.reorg-aviso--norma {
+  background: #EEF2FF; color: #3730A3;
 }
 
 .reorg-actions {
