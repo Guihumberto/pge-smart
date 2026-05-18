@@ -126,7 +126,7 @@
                 <span>{{ selectedLaw.name }}</span> 
                 <button type="button" class="autocomplete__clear" @click="clearLaw">×</button>
               </div>
-              <div v-if="showLawDropdown && (lawResults.length || lawSearchLoading)" class="autocomplete__list">
+              <div v-if="showLawDropdown && lawSearch.length >= 2" class="autocomplete__list">
                 <div v-if="lawSearchLoading" class="autocomplete__loading">
                   <span class="autocomplete__spinner"></span> Buscando...
                 </div>
@@ -139,7 +139,10 @@
                 >
                   {{ law.name }}
                 </button>
-                <div v-if="!lawSearchLoading && !lawResults.length && lawSearch.length >= 2" class="autocomplete__empty">
+                <div v-if="!lawSearchLoading && lawSearchError" class="autocomplete__empty autocomplete__empty--error">
+                  Erro ao buscar: {{ lawSearchError }}
+                </div>
+                <div v-else-if="!lawSearchLoading && !lawResults.length" class="autocomplete__empty">
                   Nenhuma lei encontrada
                 </div>
               </div>
@@ -609,6 +612,7 @@ function removeTag(index) {
 const lawSearch = ref('')
 const lawResults = ref([])
 const lawSearchLoading = ref(false)
+const lawSearchError = ref(null)
 const showLawDropdown = ref(false)
 let lawSearchTimer = null
 
@@ -617,17 +621,30 @@ function onLawSearchInput() {
   selectedLaw.value = null
   form.value.filterLaw.idLaw = null
   form.value.lawSource = ''
+  lawSearchError.value = null
 
   if (lawSearch.value.trim().length < 2) {
     lawResults.value = []
     return
   }
 
+  showLawDropdown.value = true
   lawSearchLoading.value = true
   lawSearchTimer = setTimeout(async () => {
+    const term = lawSearch.value.trim()
     try {
-      lawResults.value = await lawService.search(lawSearch.value.trim(), disciplineName.value)
-    } catch {
+      // Tenta primeiro com a disciplina (refina os hits). Se vier vazio,
+      // refaz sem disciplina — o filtro de disciplina no backend é `term`
+      // exato em `disciplina.keyword` e descartaria silenciosamente normas
+      // cuja indexação não bate exatamente com o nome local da disciplina.
+      let results = await lawService.search(term, disciplineName.value)
+      if (!results.length && disciplineName.value) {
+        results = await lawService.search(term, '')
+      }
+      lawResults.value = results
+    } catch (err) {
+      console.error('[ModalTask] erro ao buscar lei:', err)
+      lawSearchError.value = err?.message || 'falha na busca'
       lawResults.value = []
     } finally {
       lawSearchLoading.value = false
@@ -1643,6 +1660,10 @@ async function save(closeAfter = true) {
   font-size: 12px;
   color: #aaa;
   text-align: center;
+}
+
+.autocomplete__empty--error {
+  color: #c0392b;
 }
 
 /* ── Study PDF Section ───────────────────────────────────── */
