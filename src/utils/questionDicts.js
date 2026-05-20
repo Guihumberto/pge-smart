@@ -18,7 +18,7 @@ export const DISCIPLINAS = [
   { id: 5,  name: 'Direito Civil' },
   { id: 6,  name: 'Direito Ambiental' },
   { id: 7,  name: 'Direito Agrário' },
-  { id: 8,  name: 'Direito Humanos' },
+  { id: 8,  name: 'Direitos Humanos' },
   { id: 9,  name: 'Direito Financeiro' },
   { id: 10, name: 'Direito Processual do Trabalho' },
   { id: 11, name: 'Direito Econômico' },
@@ -50,6 +50,7 @@ export const DISCIPLINAS = [
   { id: 38, name: 'Legislação Específica dos Tribunais Federais' },
   { id: 39, name: 'Legislação Tributária Federal' },
   { id: 40, name: 'Teoria Geral, Filosofia e Sociologia Jurídica' },
+  { id: 41, name: 'Direitos das Pessoas com Deficiência' },
   { id: 99, name: 'Não Especificado' },
 ]
 
